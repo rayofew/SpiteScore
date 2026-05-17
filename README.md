@@ -1,0 +1,2 @@
+# SpiteScore
+Keep score
