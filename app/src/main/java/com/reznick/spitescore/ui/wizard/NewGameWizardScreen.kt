@@ -94,7 +94,7 @@ fun NewGameWizardScreen(
 @Composable
 private fun GamePickerStep(selected: GameType, onSelect: (GameType) -> Unit) {
     Text("Choose a game", style = MaterialTheme.typography.headlineMedium)
-    GameType.entries.forEach { game ->
+    GameType.entries.filter { it != GameType.FREEFORM }.forEach { game ->
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             RadioButton(selected = selected == game, onClick = { onSelect(game) })
             Spacer(Modifier.width(8.dp))
