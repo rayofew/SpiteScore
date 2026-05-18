@@ -150,8 +150,6 @@ private fun PlayerCard(
 ) {
     var amount by remember { mutableStateOf("") }
     var setToValue by remember { mutableStateOf("") }
-    val amountInt = amount.toIntOrNull()
-    val setToInt = setToValue.toIntOrNull()
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -195,8 +193,11 @@ private fun PlayerCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 OutlinedButton(
-                    onClick = { amountInt?.let { onSubtract(it); amount = "" } },
-                    enabled = amountInt != null && amountInt > 0
+                    onClick = {
+                        val n = amount.toIntOrNull()
+                        if (n != null && n > 0) { onSubtract(n); amount = "" }
+                    },
+                    enabled = amount.toIntOrNull().let { it != null && it > 0 }
                 ) { Text("−") }
 
                 OutlinedTextField(
@@ -209,8 +210,11 @@ private fun PlayerCard(
                 )
 
                 Button(
-                    onClick = { amountInt?.let { onAdd(it); amount = "" } },
-                    enabled = amountInt != null && amountInt > 0
+                    onClick = {
+                        val n = amount.toIntOrNull()
+                        if (n != null && n > 0) { onAdd(n); amount = "" }
+                    },
+                    enabled = amount.toIntOrNull().let { it != null && it > 0 }
                 ) { Text("+") }
             }
 
@@ -230,8 +234,11 @@ private fun PlayerCard(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
                 Button(
-                    onClick = { setToInt?.let { onSetTo(it); setToValue = "" } },
-                    enabled = setToInt != null
+                    onClick = {
+                        val n = setToValue.toIntOrNull()
+                        if (n != null) { onSetTo(n); setToValue = "" }
+                    },
+                    enabled = setToValue.toIntOrNull() != null
                 ) { Text("Set") }
             }
         }
