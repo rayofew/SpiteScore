@@ -63,92 +63,83 @@ fun GameScreen(
                     TextButton(onClick = { showEndGame = true }) { Text("End Game") }
                 }
             )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            // Scoreboard — fills remaining space
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                items(players, key = { it.id }) { player ->
-                    val isSelected = player.seat == selectedSeat
-                    val isLeader = player.seat == leader
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedSeat = player.seat }
-                            .background(
-                                if (isSelected) MaterialTheme.colorScheme.secondaryContainer
-                                else MaterialTheme.colorScheme.surface
-                            )
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            player.name,
-                            style = MaterialTheme.typography.titleLarge,
-                            color = if (isLeader) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            "${scores[player.seat] ?: 0}",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = if (isLeader) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+        },
+        bottomBar = {
+            if (selectedPlayer != null) {
+                Surface(shadowElevation = 8.dp) {
                     HorizontalDivider()
-                }
-
-                item {
-                    TextButton(
-                        onClick = {
-                            val seat = nextSeat++
-                            players.add(Player("p$seat", "Player ${players.size + 1}", seat))
-                            scores[seat] = 0
-                            selectedSeat = seat
+                    ScoreInputPanel(
+                        player = selectedPlayer,
+                        canRemove = players.size > 1,
+                        onRename = { renamingPlayer = selectedPlayer },
+                        onRemove = {
+                            val fallback = players.firstOrNull { it.seat != selectedPlayer.seat }?.seat ?: -1
+                            players.remove(selectedPlayer)
+                            selectedSeat = fallback
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp)
-                    ) {
-                        Icon(Icons.Default.PersonAdd, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Add Player")
-                    }
+                        onAdd = { n ->
+                            scores[selectedPlayer.seat] = (scores[selectedPlayer.seat] ?: 0) + n
+                            history.add(ScoreEntry(entryCounter++, selectedPlayer.seat, n, ""))
+                        },
+                        onSubtract = { n ->
+                            scores[selectedPlayer.seat] = (scores[selectedPlayer.seat] ?: 0) - n
+                            history.add(ScoreEntry(entryCounter++, selectedPlayer.seat, -n, ""))
+                        },
+                        onSetTo = { value ->
+                            val diff = value - (scores[selectedPlayer.seat] ?: 0)
+                            scores[selectedPlayer.seat] = value
+                            history.add(ScoreEntry(entryCounter++, selectedPlayer.seat, diff, "→ $value"))
+                        }
+                    )
                 }
             }
-
-            // Input panel — pinned to bottom
-            if (selectedPlayer != null) {
+        }
+    ) { padding ->
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
+            items(players, key = { it.id }) { player ->
+                val isSelected = player.seat == selectedSeat
+                val isLeader = player.seat == leader
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { selectedSeat = player.seat }
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surface
+                        )
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        player.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = if (isLeader) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        "${scores[player.seat] ?: 0}",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = if (isLeader) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface
+                    )
+                }
                 HorizontalDivider()
-                ScoreInputPanel(
-                    player = selectedPlayer,
-                    currentScore = scores[selectedPlayer.seat] ?: 0,
-                    canRemove = players.size > 1,
-                    onRename = { renamingPlayer = selectedPlayer },
-                    onRemove = {
-                        val fallback = players.firstOrNull { it.seat != selectedPlayer.seat }?.seat ?: -1
-                        players.remove(selectedPlayer)
-                        selectedSeat = fallback
+            }
+            item {
+                TextButton(
+                    onClick = {
+                        val seat = nextSeat++
+                        players.add(Player("p$seat", "Player ${players.size + 1}", seat))
+                        scores[seat] = 0
+                        selectedSeat = seat
                     },
-                    onAdd = { n ->
-                        scores[selectedPlayer.seat] = (scores[selectedPlayer.seat] ?: 0) + n
-                        history.add(ScoreEntry(entryCounter++, selectedPlayer.seat, n, ""))
-                    },
-                    onSubtract = { n ->
-                        scores[selectedPlayer.seat] = (scores[selectedPlayer.seat] ?: 0) - n
-                        history.add(ScoreEntry(entryCounter++, selectedPlayer.seat, -n, ""))
-                    },
-                    onSetTo = { value ->
-                        val diff = value - (scores[selectedPlayer.seat] ?: 0)
-                        scores[selectedPlayer.seat] = value
-                        history.add(ScoreEntry(entryCounter++, selectedPlayer.seat, diff, "→ $value"))
-                    }
-                )
+                    modifier = Modifier.fillMaxWidth().padding(8.dp)
+                ) {
+                    Icon(Icons.Default.PersonAdd, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add Player")
+                }
             }
         }
     }
@@ -176,7 +167,6 @@ fun GameScreen(
 @Composable
 private fun ScoreInputPanel(
     player: Player,
-    currentScore: Int,
     canRemove: Boolean,
     onRename: () -> Unit,
     onRemove: () -> Unit,
@@ -258,7 +248,6 @@ private fun ScoreInputPanel(
                     contentPadding = PaddingValues(0.dp)
                 ) { Text("Set", style = MaterialTheme.typography.labelMedium) }
 
-                Spacer(Modifier.weight(1f))
             }
         }
     }
