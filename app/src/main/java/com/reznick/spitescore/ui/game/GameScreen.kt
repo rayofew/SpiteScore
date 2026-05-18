@@ -148,8 +148,8 @@ private fun PlayerCard(
     onSubtract: (Int) -> Unit,
     onSetTo: (Int) -> Unit
 ) {
-    var amount by remember { mutableStateOf("") }
-    var setToValue by remember { mutableStateOf("") }
+    val amountState = remember { mutableStateOf("") }
+    val setToState = remember { mutableStateOf("") }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -192,30 +192,24 @@ private fun PlayerCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                OutlinedButton(
-                    onClick = {
-                        val n = amount.toIntOrNull()
-                        if (n != null && n > 0) { onSubtract(n); amount = "" }
-                    },
-                    enabled = amount.toIntOrNull().let { it != null && it > 0 }
-                ) { Text("−") }
+                OutlinedButton(onClick = {
+                    val n = amountState.value.toIntOrNull()
+                    if (n != null && n > 0) { onSubtract(n); amountState.value = "" }
+                }) { Text("−") }
 
                 OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it.filter { c -> c.isDigit() } },
+                    value = amountState.value,
+                    onValueChange = { amountState.value = it.filter { c -> c.isDigit() } },
                     label = { Text("Points") },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
 
-                Button(
-                    onClick = {
-                        val n = amount.toIntOrNull()
-                        if (n != null && n > 0) { onAdd(n); amount = "" }
-                    },
-                    enabled = amount.toIntOrNull().let { it != null && it > 0 }
-                ) { Text("+") }
+                Button(onClick = {
+                    val n = amountState.value.toIntOrNull()
+                    if (n != null && n > 0) { onAdd(n); amountState.value = "" }
+                }) { Text("+") }
             }
 
             Row(
@@ -224,22 +218,19 @@ private fun PlayerCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 OutlinedTextField(
-                    value = setToValue,
+                    value = setToState.value,
                     onValueChange = { v ->
-                        if (v.isEmpty() || v == "-" || v.toIntOrNull() != null) setToValue = v
+                        if (v.isEmpty() || v == "-" || v.toIntOrNull() != null) setToState.value = v
                     },
                     label = { Text("Change score to") },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
-                Button(
-                    onClick = {
-                        val n = setToValue.toIntOrNull()
-                        if (n != null) { onSetTo(n); setToValue = "" }
-                    },
-                    enabled = setToValue.toIntOrNull() != null
-                ) { Text("Set") }
+                Button(onClick = {
+                    val n = setToState.value.toIntOrNull()
+                    if (n != null) { onSetTo(n); setToState.value = "" }
+                }) { Text("Set") }
             }
         }
     }
