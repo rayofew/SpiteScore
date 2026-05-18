@@ -6,10 +6,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.reznick.spitescore.data.model.Player
@@ -23,17 +28,22 @@ fun GameScreen(
     onGameEnd: () -> Unit
 ) {
     val players = remember {
-        playerNames.mapIndexed { i, name ->
+        mutableStateListOf(*playerNames.mapIndexed { i, name ->
             Player("p$i", name.ifBlank { "Player ${i + 1}" }, i)
-        }
+        }.toTypedArray())
     }
+    var nextSeat by remember { mutableIntStateOf(playerNames.size) }
     val scores = remember { mutableStateMapOf<Int, Int>().also { m -> players.forEach { m[it.seat] = 0 } } }
     val history = remember { mutableStateListOf<ScoreEntry>() }
     var entryCounter by remember { mutableIntStateOf(1) }
     var showEndGame by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    var renamingPlayer by remember { mutableStateOf<Player?>(null) }
 
-    val leader = scores.entries.maxByOrNull { it.value }?.key?.takeIf { (scores[it] ?: 0) > 0 }
+    val leader = scores.entries
+        .filter { e -> players.any { it.seat == e.key } }
+        .maxByOrNull { it.value }?.key
+        ?.takeIf { (scores[it] ?: 0) > 0 }
 
     Scaffold(
         topBar = {
@@ -61,6 +71,11 @@ fun GameScreen(
                     player = player,
                     score = scores[player.seat] ?: 0,
                     isLeader = player.seat == leader,
+                    canRemove = players.size > 1,
+                    onNameTap = { renamingPlayer = player },
+                    onRemove = {
+                        players.remove(player)
+                    },
                     onAdd = { amount ->
                         scores[player.seat] = (scores[player.seat] ?: 0) + amount
                         history.add(ScoreEntry(entryCounter++, player.seat, amount, ""))
@@ -76,7 +91,29 @@ fun GameScreen(
                     }
                 )
             }
+
+            OutlinedButton(
+                onClick = {
+                    val seat = nextSeat++
+                    val name = "Player ${players.size + 1}"
+                    players.add(Player("p$seat", name, seat))
+                    scores[seat] = 0
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Add Player") }
         }
+    }
+
+    renamingPlayer?.let { player ->
+        RenameDialog(
+            current = player.name,
+            onConfirm = { newName ->
+                val idx = players.indexOfFirst { it.id == player.id }
+                if (idx >= 0) players[idx] = players[idx].copy(name = newName)
+                renamingPlayer = null
+            },
+            onDismiss = { renamingPlayer = null }
+        )
     }
 
     if (showHistory) {
@@ -102,6 +139,9 @@ private fun PlayerCard(
     player: Player,
     score: Int,
     isLeader: Boolean,
+    canRemove: Boolean,
+    onNameTap: () -> Unit,
+    onRemove: () -> Unit,
     onAdd: (Int) -> Unit,
     onSubtract: (Int) -> Unit,
     onSetTo: (Int) -> Unit
@@ -127,8 +167,24 @@ private fun PlayerCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(player.name, style = MaterialTheme.typography.headlineSmall)
-                Text("$score", style = MaterialTheme.typography.displaySmall)
+                TextButton(
+                    onClick = onNameTap,
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                ) {
+                    Text(player.name, style = MaterialTheme.typography.headlineSmall)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("$score", style = MaterialTheme.typography.displaySmall)
+                    if (canRemove) {
+                        IconButton(onClick = onRemove) {
+                            Icon(
+                                Icons.Default.PersonRemove,
+                                contentDescription = "Remove ${player.name}",
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            )
+                        }
+                    }
+                }
             }
 
             Row(
@@ -178,6 +234,42 @@ private fun PlayerCard(
             }
         }
     }
+}
+
+@Composable
+private fun RenameDialog(
+    current: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var text by remember { mutableStateOf(current) }
+    val focusRequester = remember { FocusRequester() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename player") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Name") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (text.isNotBlank()) onConfirm(text.trim()) },
+                enabled = text.isNotBlank()
+            ) { Text("Rename") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
