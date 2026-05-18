@@ -4,14 +4,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.reznick.spitescore.data.model.Player
 import com.reznick.spitescore.data.model.ScoreEntry
@@ -20,60 +17,57 @@ import com.reznick.spitescore.data.model.ScoreEntry
 @Composable
 fun GameScreen(
     gameId: String,
+    playerNames: List<String>,
     onGameEnd: () -> Unit
 ) {
-    // In production, these flow from GameViewModel
     val players = remember {
-        listOf(
-            Player("p0", "Player 1", 0),
-            Player("p1", "Player 2", 1)
-        )
+        playerNames.mapIndexed { i, name ->
+            Player("p$i", name.ifBlank { "Player ${i + 1}" }, i)
+        }
     }
-    val entries = remember { mutableStateListOf<ScoreEntry>() }
-    var round by remember { mutableIntStateOf(1) }
-    var showAddRound by remember { mutableStateOf(false) }
+    val scores = remember { mutableStateMapOf<Int, Int>().also { m -> players.forEach { m[it.seat] = 0 } } }
+    val history = remember { mutableStateListOf<ScoreEntry>() }
+    var entryCounter by remember { mutableIntStateOf(1) }
+    var selectedPlayer by remember { mutableStateOf<Player?>(null) }
     var showEndGame by remember { mutableStateOf(false) }
 
-    val totals = players.associate { p -> p.seat to entries.filter { it.playerSeat == p.seat }.sumOf { it.points } }
-    val leader = totals.maxByOrNull { it.value }?.key
+    val leader = scores.entries.maxByOrNull { it.value }?.key?.takeIf { (scores[it] ?: 0) > 0 }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Round $round") },
+                title = { Text("SpiteScore") },
                 actions = {
                     TextButton(onClick = { showEndGame = true }) { Text("End Game") }
                 }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showAddRound = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add scores")
-            }
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Running scoreboard
-            ScoreboardHeader(players, totals, leader)
-            HorizontalDivider()
+            players.forEach { player ->
+                PlayerCard(
+                    player = player,
+                    score = scores[player.seat] ?: 0,
+                    isLeader = player.seat == leader,
+                    onClick = { selectedPlayer = player }
+                )
+            }
 
-            // Score history
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                val grouped = entries.groupBy { it.round }
-                grouped.keys.sortedDescending().forEach { r ->
-                    item {
-                        Text(
-                            "Round $r",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-                    items(grouped[r] ?: emptyList()) { entry ->
+            if (history.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Text(
+                    "History",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    items(history.reversed()) { entry ->
                         val playerName = players.find { it.seat == entry.playerSeat }?.name ?: "?"
                         ListItem(
                             headlineContent = { Text(playerName) },
@@ -81,7 +75,7 @@ fun GameScreen(
                             trailingContent = {
                                 Text(
                                     "${if (entry.points >= 0) "+" else ""}${entry.points}",
-                                    style = MaterialTheme.typography.titleLarge,
+                                    style = MaterialTheme.typography.titleMedium,
                                     color = if (entry.points >= 0) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.error
                                 )
@@ -93,23 +87,34 @@ fun GameScreen(
         }
     }
 
-    if (showAddRound) {
-        AddRoundDialog(
-            players = players,
-            round = round,
-            onConfirm = { newEntries ->
-                entries.addAll(newEntries)
-                round++
-                showAddRound = false
+    selectedPlayer?.let { player ->
+        PlayerScoreDialog(
+            player = player,
+            currentScore = scores[player.seat] ?: 0,
+            onAdd = { amount ->
+                scores[player.seat] = (scores[player.seat] ?: 0) + amount
+                history.add(ScoreEntry(entryCounter++, player.seat, amount, ""))
+                selectedPlayer = null
             },
-            onDismiss = { showAddRound = false }
+            onSubtract = { amount ->
+                scores[player.seat] = (scores[player.seat] ?: 0) - amount
+                history.add(ScoreEntry(entryCounter++, player.seat, -amount, ""))
+                selectedPlayer = null
+            },
+            onSetTo = { value ->
+                val diff = value - (scores[player.seat] ?: 0)
+                scores[player.seat] = value
+                history.add(ScoreEntry(entryCounter++, player.seat, diff, "→ $value"))
+                selectedPlayer = null
+            },
+            onDismiss = { selectedPlayer = null }
         )
     }
 
     if (showEndGame) {
         EndGameDialog(
             players = players,
-            totals = totals,
+            scores = scores,
             onConfirm = onGameEnd,
             onDismiss = { showEndGame = false }
         )
@@ -117,87 +122,108 @@ fun GameScreen(
 }
 
 @Composable
-private fun ScoreboardHeader(
-    players: List<Player>,
-    totals: Map<Int, Int>,
-    leaderSeat: Int?
+private fun PlayerCard(
+    player: Player,
+    score: Int,
+    isLeader: Boolean,
+    onClick: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isLeader) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant
+        )
     ) {
-        players.forEach { player ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    player.name,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (player.seat == leaderSeat) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    "${totals[player.seat] ?: 0}",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = if (player.seat == leaderSeat) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurface
-                )
-            }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(player.name, style = MaterialTheme.typography.headlineSmall)
+            Text("$score", style = MaterialTheme.typography.displaySmall)
         }
     }
 }
 
 @Composable
-private fun AddRoundDialog(
-    players: List<Player>,
-    round: Int,
-    onConfirm: (List<ScoreEntry>) -> Unit,
+private fun PlayerScoreDialog(
+    player: Player,
+    currentScore: Int,
+    onAdd: (Int) -> Unit,
+    onSubtract: (Int) -> Unit,
+    onSetTo: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val scores = remember { mutableStateMapOf<Int, String>().also { m -> players.forEach { m[it.seat] = "" } } }
-    val labels = remember { mutableStateMapOf<Int, String>().also { m -> players.forEach { m[it.seat] = "" } } }
+    var amount by remember { mutableStateOf("") }
+    var setToValue by remember { mutableStateOf("") }
+    val amountInt = amount.toIntOrNull()
+    val setToInt = setToValue.toIntOrNull()
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Round $round scores") },
+        title = { Text(player.name) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                players.forEach { player ->
-                    Text(player.name, style = MaterialTheme.typography.labelLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = scores[player.seat] ?: "",
-                            onValueChange = { scores[player.seat] = it },
-                            label = { Text("Points") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                        )
-                        OutlinedTextField(
-                            value = labels[player.seat] ?: "",
-                            onValueChange = { labels[player.seat] = it },
-                            label = { Text("Note") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                    }
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    "Score: $currentScore",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedButton(
+                        onClick = { amountInt?.let { onSubtract(it) } },
+                        enabled = amountInt != null && amountInt > 0
+                    ) { Text("−") }
+
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it.filter { c -> c.isDigit() } },
+                        label = { Text("Points") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+
+                    Button(
+                        onClick = { amountInt?.let { onAdd(it) } },
+                        enabled = amountInt != null && amountInt > 0
+                    ) { Text("+") }
+                }
+
+                HorizontalDivider()
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = setToValue,
+                        onValueChange = { v ->
+                            if (v.isEmpty() || v == "-" || v.toIntOrNull() != null) setToValue = v
+                        },
+                        label = { Text("Change score to") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    Button(
+                        onClick = { setToInt?.let { onSetTo(it) } },
+                        enabled = setToInt != null
+                    ) { Text("Set") }
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = {
-                val entries = players.mapNotNull { player ->
-                    val pts = scores[player.seat]?.toIntOrNull() ?: return@mapNotNull null
-                    ScoreEntry(
-                        round = round,
-                        playerSeat = player.seat,
-                        points = pts,
-                        label = labels[player.seat] ?: ""
-                    )
-                }
-                onConfirm(entries)
-            }) { Text("Add") }
-        },
+        confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
@@ -205,20 +231,23 @@ private fun AddRoundDialog(
 @Composable
 private fun EndGameDialog(
     players: List<Player>,
-    totals: Map<Int, Int>,
+    scores: Map<Int, Int>,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val sorted = players.sortedByDescending { totals[it.seat] ?: 0 }
+    val sorted = players.sortedByDescending { scores[it.seat] ?: 0 }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("End game?") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 sorted.forEachIndexed { i, player ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Text("${i + 1}. ${player.name}")
-                        Text("${totals[player.seat] ?: 0} pts")
+                        Text("${scores[player.seat] ?: 0} pts")
                     }
                 }
             }

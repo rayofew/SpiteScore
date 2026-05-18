@@ -1,5 +1,6 @@
 package com.reznick.spitescore.navigation
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -17,8 +18,9 @@ import com.reznick.spitescore.ui.wizard.NewGameWizardScreen
 sealed class Screen(val route: String) {
     object Home : Screen("home")
     object NewGameWizard : Screen("wizard")
-    object Game : Screen("game/{gameId}") {
-        fun route(gameId: String) = "game/$gameId"
+    object Game : Screen("game/{gameId}/{players}") {
+        fun route(gameId: String, players: List<String>) =
+            "game/$gameId/${Uri.encode(players.joinToString("|"))}"
     }
     object GameHistory : Screen("history")
     object Settings : Screen("settings")
@@ -41,17 +43,26 @@ fun SpiteScoreNavHost(incomingResult: GameResultPayload? = null) {
         }
         composable(Screen.NewGameWizard.route) {
             NewGameWizardScreen(
-                onGameStarted = { gameId -> navController.navigate(Screen.Game.route(gameId)) },
+                onGameStarted = { gameId, players ->
+                    navController.navigate(Screen.Game.route(gameId, players))
+                },
                 onBack = { navController.popBackStack() }
             )
         }
         composable(
             route = Screen.Game.route,
-            arguments = listOf(navArgument("gameId") { type = NavType.StringType })
+            arguments = listOf(
+                navArgument("gameId") { type = NavType.StringType },
+                navArgument("players") { type = NavType.StringType }
+            )
         ) { backStack ->
             val gameId = backStack.arguments?.getString("gameId") ?: return@composable
+            val playersArg = Uri.decode(backStack.arguments?.getString("players") ?: "")
+            val playerNames = if (playersArg.isBlank()) listOf("Player 1", "Player 2")
+                              else playersArg.split("|").filter { it.isNotBlank() }
             GameScreen(
                 gameId = gameId,
+                playerNames = playerNames,
                 onGameEnd = {
                     navController.navigate(Screen.Home.route) {
                         popUpTo(Screen.Home.route) { inclusive = true }

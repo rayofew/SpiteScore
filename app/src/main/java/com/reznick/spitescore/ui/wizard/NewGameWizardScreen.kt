@@ -15,7 +15,7 @@ import com.reznick.spitescore.data.model.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewGameWizardScreen(
-    onGameStarted: (String) -> Unit,
+    onGameStarted: (String, List<String>) -> Unit,
     onBack: () -> Unit
 ) {
     var step by remember { mutableIntStateOf(0) }
@@ -68,13 +68,17 @@ fun NewGameWizardScreen(
                 ) { Text("Next") }
             } else {
                 Button(
-                    onClick = { onGameStarted("game_${System.currentTimeMillis()}") },
+                    onClick = {
+                        val names = players.filter { it.isNotBlank() }
+                            .ifEmpty { listOf("Player 1", "Player 2") }
+                        onGameStarted("game_${System.currentTimeMillis()}", names)
+                    },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Start Game") }
             }
 
             TextButton(
-                onClick = { onGameStarted("game_${System.currentTimeMillis()}") },
+                onClick = { onGameStarted("game_${System.currentTimeMillis()}", listOf("Player 1", "Player 2")) },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Skip to free-form") }
         }
