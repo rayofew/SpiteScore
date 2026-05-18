@@ -193,13 +193,15 @@ private fun PlayerCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 OutlinedButton(onClick = {
-                    val n = amountState.value.toIntOrNull()
-                    if (n != null && n > 0) { onSubtract(n); amountState.value = "" }
+                    val n = amountState.value.toIntOrNull() ?: 1
+                    onSubtract(n)
+                    amountState.value = ""
                 }) { Text("−") }
 
                 OutlinedTextField(
                     value = amountState.value,
                     onValueChange = { amountState.value = it.filter { c -> c.isDigit() } },
+                    placeholder = { Text("1") },
                     label = { Text("Points") },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
@@ -207,8 +209,9 @@ private fun PlayerCard(
                 )
 
                 Button(onClick = {
-                    val n = amountState.value.toIntOrNull()
-                    if (n != null && n > 0) { onAdd(n); amountState.value = "" }
+                    val n = amountState.value.toIntOrNull() ?: 1
+                    onAdd(n)
+                    amountState.value = ""
                 }) { Text("+") }
             }
 
