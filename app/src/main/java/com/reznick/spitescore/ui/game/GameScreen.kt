@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BackspaceOutlined
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material3.*
@@ -242,7 +241,7 @@ private fun ScoreInputPanel(
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(0.dp)
                     ) {
-                        Icon(Icons.Default.BackspaceOutlined, contentDescription = "Backspace")
+                        Text("⌫", style = MaterialTheme.typography.titleLarge)
                     }
                 }
             }
