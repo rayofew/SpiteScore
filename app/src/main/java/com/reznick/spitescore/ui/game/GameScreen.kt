@@ -192,19 +192,24 @@ private fun ScoreInputPanel(
                 else input
     }
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-        // Player name + rename/remove
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // Player name + input display + rename/remove
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(
-                onClick = onRename,
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-            ) {
-                Text(player.name, style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = onRename, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                Text(player.name, style = MaterialTheme.typography.labelLarge)
             }
+            Text(
+                text = if (input.isEmpty()) "—" else input,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center
+            )
             if (canRemove) {
                 IconButton(onClick = onRemove) {
                     Icon(Icons.Default.PersonRemove, contentDescription = "Remove",
@@ -213,63 +218,47 @@ private fun ScoreInputPanel(
             }
         }
 
-        // Score display
-        Text(
-            text = if (input.isEmpty()) "0" else input,
-            style = MaterialTheme.typography.displaySmall,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-        )
-
         // Keypad + action buttons side by side
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             // Digit grid
-            Column(modifier = Modifier.weight(3f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                val keypadRows = listOf(listOf("7","8","9"), listOf("4","5","6"), listOf("1","2","3"))
-                keypadRows.forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(modifier = Modifier.weight(3f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf(listOf("7","8","9"), listOf("4","5","6"), listOf("1","2","3")).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         row.forEach { digit ->
                             KeypadDigitButton(digit, modifier = Modifier.weight(1f)) { appendDigit(digit) }
                         }
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     KeypadDigitButton("0", modifier = Modifier.weight(2f)) { appendDigit("0") }
-                    OutlinedButton(
-                        onClick = { input = input.dropLast(1) },
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Text("⌫", style = MaterialTheme.typography.titleLarge)
-                    }
+                    KeypadDigitButton("⌫", modifier = Modifier.weight(1f)) { input = input.dropLast(1) }
                 }
             }
 
             // Action buttons
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Button(
                     onClick = { onAdd(input.toIntOrNull() ?: 1); input = "" },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(0.dp)
-                ) { Text("+", style = MaterialTheme.typography.titleLarge) }
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(0.dp)
+                ) { Text("+", style = MaterialTheme.typography.titleMedium) }
 
                 OutlinedButton(
                     onClick = { onSubtract(input.toIntOrNull() ?: 1); input = "" },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(0.dp)
-                ) { Text("−", style = MaterialTheme.typography.titleLarge) }
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(0.dp)
+                ) { Text("−", style = MaterialTheme.typography.titleMedium) }
 
                 Button(
                     onClick = { val n = input.toIntOrNull(); if (n != null) { onSetTo(n); input = "" } },
                     enabled = input.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                     contentPadding = PaddingValues(0.dp)
-                ) { Text("Set", style = MaterialTheme.typography.labelLarge) }
+                ) { Text("Set", style = MaterialTheme.typography.labelMedium) }
+
+                Spacer(Modifier.weight(1f))
             }
         }
     }
@@ -279,7 +268,7 @@ private fun ScoreInputPanel(
 private fun KeypadDigitButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.height(52.dp),
+        modifier = modifier.height(44.dp),
         shape = RoundedCornerShape(8.dp),
         contentPadding = PaddingValues(0.dp)
     ) {
