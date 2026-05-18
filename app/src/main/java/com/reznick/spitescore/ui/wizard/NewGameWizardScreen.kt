@@ -39,13 +39,43 @@ fun NewGameWizardScreen(
                     }
                 }
             )
+        },
+        bottomBar = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (step < totalSteps - 1) {
+                    Button(
+                        onClick = { step++ },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = step != 1 || players.any { it.isNotBlank() }
+                    ) { Text("Next") }
+                } else {
+                    Button(
+                        onClick = {
+                            val names = players.filter { it.isNotBlank() }
+                                .ifEmpty { listOf("Player 1", "Player 2") }
+                            onGameStarted("game_${System.currentTimeMillis()}", names)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Start Game") }
+                }
+                TextButton(
+                    onClick = { onGameStarted("game_${System.currentTimeMillis()}", listOf("Player 1", "Player 2")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Skip to free-form") }
+            }
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(24.dp),
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             when (step) {
@@ -57,30 +87,6 @@ fun NewGameWizardScreen(
                     onMuggins = { muggins = it })
                 3 -> SaveSetupStep(saveSetup, setupName, { saveSetup = it }, { setupName = it })
             }
-
-            Spacer(Modifier.weight(1f))
-
-            if (step < totalSteps - 1) {
-                Button(
-                    onClick = { step++ },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = step != 1 || players.any { it.isNotBlank() }
-                ) { Text("Next") }
-            } else {
-                Button(
-                    onClick = {
-                        val names = players.filter { it.isNotBlank() }
-                            .ifEmpty { listOf("Player 1", "Player 2") }
-                        onGameStarted("game_${System.currentTimeMillis()}", names)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Start Game") }
-            }
-
-            TextButton(
-                onClick = { onGameStarted("game_${System.currentTimeMillis()}", listOf("Player 1", "Player 2")) },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Skip to free-form") }
         }
     }
 }
