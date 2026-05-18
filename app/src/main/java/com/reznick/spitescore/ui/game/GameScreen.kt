@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.key
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material3.*
@@ -62,34 +63,35 @@ fun GameScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             players.forEach { player ->
-                PlayerCard(
-                    player = player,
-                    score = scores[player.seat] ?: 0,
-                    isLeader = player.seat == leader,
-                    canRemove = players.size > 1,
-                    onNameTap = { renamingPlayer = player },
-                    onRemove = {
-                        players.remove(player)
-                    },
-                    onAdd = { amount ->
-                        scores[player.seat] = (scores[player.seat] ?: 0) + amount
-                        history.add(ScoreEntry(entryCounter++, player.seat, amount, ""))
-                    },
-                    onSubtract = { amount ->
-                        scores[player.seat] = (scores[player.seat] ?: 0) - amount
-                        history.add(ScoreEntry(entryCounter++, player.seat, -amount, ""))
-                    },
-                    onSetTo = { value ->
-                        val diff = value - (scores[player.seat] ?: 0)
-                        scores[player.seat] = value
-                        history.add(ScoreEntry(entryCounter++, player.seat, diff, "→ $value"))
-                    }
-                )
+                key(player.id) {
+                    PlayerCard(
+                        player = player,
+                        score = scores[player.seat] ?: 0,
+                        isLeader = player.seat == leader,
+                        canRemove = players.size > 1,
+                        onNameTap = { renamingPlayer = player },
+                        onRemove = { players.remove(player) },
+                        onAdd = { amount ->
+                            scores[player.seat] = (scores[player.seat] ?: 0) + amount
+                            history.add(ScoreEntry(entryCounter++, player.seat, amount, ""))
+                        },
+                        onSubtract = { amount ->
+                            scores[player.seat] = (scores[player.seat] ?: 0) - amount
+                            history.add(ScoreEntry(entryCounter++, player.seat, -amount, ""))
+                        },
+                        onSetTo = { value ->
+                            val diff = value - (scores[player.seat] ?: 0)
+                            scores[player.seat] = value
+                            history.add(ScoreEntry(entryCounter++, player.seat, diff, "→ $value"))
+                        }
+                    )
+                }
             }
 
             OutlinedButton(
