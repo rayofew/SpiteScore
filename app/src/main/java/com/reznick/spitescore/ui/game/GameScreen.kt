@@ -3,7 +3,9 @@ package com.reznick.spitescore.ui.game
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,8 +30,8 @@ fun GameScreen(
     val scores = remember { mutableStateMapOf<Int, Int>().also { m -> players.forEach { m[it.seat] = 0 } } }
     val history = remember { mutableStateListOf<ScoreEntry>() }
     var entryCounter by remember { mutableIntStateOf(1) }
-    var selectedPlayer by remember { mutableStateOf<Player?>(null) }
     var showEndGame by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
 
     val leader = scores.entries.maxByOrNull { it.value }?.key?.takeIf { (scores[it] ?: 0) > 0 }
 
@@ -38,6 +40,9 @@ fun GameScreen(
             TopAppBar(
                 title = { Text("SpiteScore") },
                 actions = {
+                    if (history.isNotEmpty()) {
+                        TextButton(onClick = { showHistory = true }) { Text("History") }
+                    }
                     TextButton(onClick = { showEndGame = true }) { Text("End Game") }
                 }
             )
@@ -47,6 +52,7 @@ fun GameScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -55,59 +61,29 @@ fun GameScreen(
                     player = player,
                     score = scores[player.seat] ?: 0,
                     isLeader = player.seat == leader,
-                    onClick = { selectedPlayer = player }
-                )
-            }
-
-            if (history.isNotEmpty()) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                Text(
-                    "History",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                )
-                LazyColumn(modifier = Modifier.weight(1f)) {
-                    items(history.reversed()) { entry ->
-                        val playerName = players.find { it.seat == entry.playerSeat }?.name ?: "?"
-                        ListItem(
-                            headlineContent = { Text(playerName) },
-                            supportingContent = { if (entry.label.isNotEmpty()) Text(entry.label) },
-                            trailingContent = {
-                                Text(
-                                    "${if (entry.points >= 0) "+" else ""}${entry.points}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = if (entry.points >= 0) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.error
-                                )
-                            }
-                        )
+                    onAdd = { amount ->
+                        scores[player.seat] = (scores[player.seat] ?: 0) + amount
+                        history.add(ScoreEntry(entryCounter++, player.seat, amount, ""))
+                    },
+                    onSubtract = { amount ->
+                        scores[player.seat] = (scores[player.seat] ?: 0) - amount
+                        history.add(ScoreEntry(entryCounter++, player.seat, -amount, ""))
+                    },
+                    onSetTo = { value ->
+                        val diff = value - (scores[player.seat] ?: 0)
+                        scores[player.seat] = value
+                        history.add(ScoreEntry(entryCounter++, player.seat, diff, "→ $value"))
                     }
-                }
+                )
             }
         }
     }
 
-    selectedPlayer?.let { player ->
-        PlayerScoreDialog(
-            player = player,
-            currentScore = scores[player.seat] ?: 0,
-            onAdd = { amount ->
-                scores[player.seat] = (scores[player.seat] ?: 0) + amount
-                history.add(ScoreEntry(entryCounter++, player.seat, amount, ""))
-                selectedPlayer = null
-            },
-            onSubtract = { amount ->
-                scores[player.seat] = (scores[player.seat] ?: 0) - amount
-                history.add(ScoreEntry(entryCounter++, player.seat, -amount, ""))
-                selectedPlayer = null
-            },
-            onSetTo = { value ->
-                val diff = value - (scores[player.seat] ?: 0)
-                scores[player.seat] = value
-                history.add(ScoreEntry(entryCounter++, player.seat, diff, "→ $value"))
-                selectedPlayer = null
-            },
-            onDismiss = { selectedPlayer = null }
+    if (showHistory) {
+        HistorySheet(
+            players = players,
+            history = history,
+            onDismiss = { showHistory = false }
         )
     }
 
@@ -126,106 +102,113 @@ private fun PlayerCard(
     player: Player,
     score: Int,
     isLeader: Boolean,
-    onClick: () -> Unit
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isLeader) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(player.name, style = MaterialTheme.typography.headlineSmall)
-            Text("$score", style = MaterialTheme.typography.displaySmall)
-        }
-    }
-}
-
-@Composable
-private fun PlayerScoreDialog(
-    player: Player,
-    currentScore: Int,
     onAdd: (Int) -> Unit,
     onSubtract: (Int) -> Unit,
-    onSetTo: (Int) -> Unit,
-    onDismiss: () -> Unit
+    onSetTo: (Int) -> Unit
 ) {
     var amount by remember { mutableStateOf("") }
     var setToValue by remember { mutableStateOf("") }
     val amountInt = amount.toIntOrNull()
     val setToInt = setToValue.toIntOrNull()
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(player.name) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    "Score: $currentScore",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isLeader) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(player.name, style = MaterialTheme.typography.headlineSmall)
+                Text("$score", style = MaterialTheme.typography.displaySmall)
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedButton(
+                    onClick = { amountInt?.let { onSubtract(it); amount = "" } },
+                    enabled = amountInt != null && amountInt > 0
+                ) { Text("−") }
+
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it.filter { c -> c.isDigit() } },
+                    label = { Text("Points") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedButton(
-                        onClick = { amountInt?.let { onSubtract(it) } },
-                        enabled = amountInt != null && amountInt > 0
-                    ) { Text("−") }
-
-                    OutlinedTextField(
-                        value = amount,
-                        onValueChange = { amount = it.filter { c -> c.isDigit() } },
-                        label = { Text("Points") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-
-                    Button(
-                        onClick = { amountInt?.let { onAdd(it) } },
-                        enabled = amountInt != null && amountInt > 0
-                    ) { Text("+") }
-                }
-
-                HorizontalDivider()
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = setToValue,
-                        onValueChange = { v ->
-                            if (v.isEmpty() || v == "-" || v.toIntOrNull() != null) setToValue = v
-                        },
-                        label = { Text("Change score to") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                    Button(
-                        onClick = { setToInt?.let { onSetTo(it) } },
-                        enabled = setToInt != null
-                    ) { Text("Set") }
-                }
+                Button(
+                    onClick = { amountInt?.let { onAdd(it); amount = "" } },
+                    enabled = amountInt != null && amountInt > 0
+                ) { Text("+") }
             }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = setToValue,
+                    onValueChange = { v ->
+                        if (v.isEmpty() || v == "-" || v.toIntOrNull() != null) setToValue = v
+                    },
+                    label = { Text("Change score to") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                Button(
+                    onClick = { setToInt?.let { onSetTo(it); setToValue = "" } },
+                    enabled = setToInt != null
+                ) { Text("Set") }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HistorySheet(
+    players: List<Player>,
+    history: List<ScoreEntry>,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(bottom = 32.dp)
+        ) {
+            items(history.reversed()) { entry ->
+                val playerName = players.find { it.seat == entry.playerSeat }?.name ?: "?"
+                ListItem(
+                    headlineContent = { Text(playerName) },
+                    supportingContent = { if (entry.label.isNotEmpty()) Text(entry.label) },
+                    trailingContent = {
+                        Text(
+                            "${if (entry.points >= 0) "+" else ""}${entry.points}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (entry.points >= 0) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error
+                        )
+                    }
+                )
+            }
+        }
+    }
 }
 
 @Composable
