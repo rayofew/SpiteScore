@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SpiteScore</string>
+    <string name="new_game">New Game</string>
+    <string name="history">History</string>
+    <string name="settings">Settings</string>
+    <string name="about">About</string>
+    <string name="play_again">Play Again</string>
+    <string name="done">Done</string>
+    <string name="replay_with_spitecards">Replay with SpiteCards</string>
+    <string name="install_spitecards">SpiteCards links phones in the same room for a virtual deck. Install it for free?</string>
+    <string name="install">Install</string>
+    <string name="not_now">Not now</string>
+    <string name="add_round">Add Round</string>
+    <string name="end_game">End Game</string>
+    <string name="save_setup">Save as setup</string>
+    <string name="part_of_spite_line">Part of the Spite line · Tap to see other apps</string>
+    <string name="donate">Donate</string>
+    <string name="privacy_policy">Privacy Policy</string>
+</resources>

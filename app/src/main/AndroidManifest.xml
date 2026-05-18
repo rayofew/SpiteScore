@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Intentionally no android.permission.INTERNET -->
+
+    <!-- Detect SpiteCards installation (Android 11+ package visibility) -->
+    <queries>
+        <package android:name="com.reznick.spitecards" />
+    </queries>
+
+    <application
+        android:name=".SpiteScoreApp"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.SpiteScore">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Entry point for incoming game-result intents from SpiteCards -->
+        <activity
+            android:name=".integration.spitecards.ReceiveGameResultActivity"
+            android:exported="true"
+            android:taskAffinity="com.reznick.spitescore.integration">
+            <intent-filter>
+                <action android:name="com.reznick.spite.action.RECEIVE_GAME_RESULT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.spite.gameresult+json" />
+            </intent-filter>
+        </activity>
+
+    </application>
+
+</manifest>
