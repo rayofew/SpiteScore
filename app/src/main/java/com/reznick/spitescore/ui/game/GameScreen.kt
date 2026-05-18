@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BackspaceOutlined
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material3.*
@@ -18,6 +20,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.reznick.spitescore.data.model.Player
 import com.reznick.spitescore.data.model.ScoreEntry
@@ -67,7 +70,6 @@ fun GameScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .imePadding()
         ) {
             // Scoreboard — fills remaining space
             LazyColumn(modifier = Modifier.weight(1f)) {
@@ -183,15 +185,15 @@ private fun ScoreInputPanel(
     onSubtract: (Int) -> Unit,
     onSetTo: (Int) -> Unit
 ) {
-    val amountState = remember(player.id) { mutableStateOf("") }
-    val setToState = remember(player.id) { mutableStateOf("") }
+    var input by remember(player.id) { mutableStateOf("") }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
+    fun appendDigit(d: String) {
+        input = if (input.isEmpty() || input == "0") d
+                else if (input.length < 6) input + d
+                else input
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         // Player name + rename/remove
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -206,63 +208,83 @@ private fun ScoreInputPanel(
             }
             if (canRemove) {
                 IconButton(onClick = onRemove) {
-                    Icon(
-                        Icons.Default.PersonRemove,
-                        contentDescription = "Remove ${player.name}",
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    )
+                    Icon(Icons.Default.PersonRemove, contentDescription = "Remove",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                 }
             }
         }
 
-        // +/- row
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            OutlinedButton(onClick = {
-                val n = amountState.value.toIntOrNull() ?: 1
-                onSubtract(n); amountState.value = ""
-            }) { Text("−") }
+        // Score display
+        Text(
+            text = if (input.isEmpty()) "0" else input,
+            style = MaterialTheme.typography.displaySmall,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+        )
 
-            OutlinedTextField(
-                value = amountState.value,
-                onValueChange = { amountState.value = it.filter { c -> c.isDigit() } },
-                placeholder = { Text("1") },
-                label = { Text("Points") },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-            )
+        // Keypad + action buttons side by side
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Digit grid
+            Column(modifier = Modifier.weight(3f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                val keypadRows = listOf(listOf("7","8","9"), listOf("4","5","6"), listOf("1","2","3"))
+                keypadRows.forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEach { digit ->
+                            KeypadDigitButton(digit, modifier = Modifier.weight(1f)) { appendDigit(digit) }
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    KeypadDigitButton("0", modifier = Modifier.weight(2f)) { appendDigit("0") }
+                    OutlinedButton(
+                        onClick = { input = input.dropLast(1) },
+                        modifier = Modifier.weight(1f).height(52.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(Icons.Default.BackspaceOutlined, contentDescription = "Backspace")
+                    }
+                }
+            }
 
-            Button(onClick = {
-                val n = amountState.value.toIntOrNull() ?: 1
-                onAdd(n); amountState.value = ""
-            }) { Text("+") }
+            // Action buttons
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(
+                    onClick = { onAdd(input.toIntOrNull() ?: 1); input = "" },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) { Text("+", style = MaterialTheme.typography.titleLarge) }
+
+                OutlinedButton(
+                    onClick = { onSubtract(input.toIntOrNull() ?: 1); input = "" },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) { Text("−", style = MaterialTheme.typography.titleLarge) }
+
+                Button(
+                    onClick = { val n = input.toIntOrNull(); if (n != null) { onSetTo(n); input = "" } },
+                    enabled = input.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                    contentPadding = PaddingValues(0.dp)
+                ) { Text("Set", style = MaterialTheme.typography.labelLarge) }
+            }
         }
+    }
+}
 
-        // Set to row
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            OutlinedTextField(
-                value = setToState.value,
-                onValueChange = { v ->
-                    if (v.isEmpty() || v == "-" || v.toIntOrNull() != null) setToState.value = v
-                },
-                label = { Text("Change score to") },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-            )
-            Button(onClick = {
-                val n = setToState.value.toIntOrNull()
-                if (n != null) { onSetTo(n); setToState.value = "" }
-            }) { Text("Set") }
-        }
+@Composable
+private fun KeypadDigitButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.height(52.dp),
+        shape = RoundedCornerShape(8.dp),
+        contentPadding = PaddingValues(0.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.titleLarge)
     }
 }
 
