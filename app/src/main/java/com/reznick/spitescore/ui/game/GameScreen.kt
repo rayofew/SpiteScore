@@ -242,7 +242,7 @@ private fun RenameDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var text by remember { mutableStateOf(current) }
+    var text by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
 
     AlertDialog(
