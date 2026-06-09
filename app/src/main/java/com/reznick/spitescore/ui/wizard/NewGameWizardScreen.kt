@@ -1,22 +1,32 @@
 package com.reznick.spitescore.ui.wizard
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.reznick.spitescore.SpiteScoreApp
+import com.reznick.spitescore.data.model.Player
+import com.reznick.spitescore.integration.CompanionGames
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NewGameWizardScreen(
     onGameStarted: (
@@ -24,26 +34,40 @@ fun NewGameWizardScreen(
         players: List<String>,
         playUntil: Int?,
         gameType: String?,
-        partnerships: List<Pair<Int, Int>>
+        teams: List<List<Int>>
     ) -> Unit,
     onBack: () -> Unit
 ) {
     val app = LocalContext.current.applicationContext as SpiteScoreApp
     val roster = remember { app.playerRosterRepository.getPlayers() }
-    val gameTypes = remember { app.gameTypeRepository.getTypes() }
+    // Companion games (played in another app) are always offered up top
+    val gameTypes = remember {
+        (CompanionGames.displayNames + app.gameTypeRepository.getTypes()).distinct()
+    }
 
     var players by remember { mutableStateOf(listOf("", "")) }
     var hasScoreLimit by remember { mutableStateOf(false) }
     var playUntil by remember { mutableStateOf("") }
     var gameType by remember { mutableStateOf("") }
     var teamsEnabled by remember { mutableStateOf(false) }
-    // List of (playerIndexA, playerIndexB) pairs — indices into the `players` list
-    var teamPairs by remember { mutableStateOf(listOf<Pair<Int, Int>>()) }
+    // player-row index → teamId. Indices absent from the map play solo.
+    var teamAssign by remember { mutableStateOf<Map<Int, Int>>(emptyMap()) }
+    var selectedIdx by remember { mutableStateOf<Int?>(null) }
+    var nextTeamId by remember { mutableStateOf(1) }
+    var showInstallDialog by remember { mutableStateOf(false) }
 
     // Computed at composable scope so both bottomBar and content can read it
     val hasDuplicates = players.filter { it.isNotBlank() }
         .map { it.trim().lowercase() }
         .let { names -> names.size != names.distinct().size }
+
+    // A companion game is played in a separate app, not scored here
+    val companionPackage = CompanionGames.packageFor(gameType)
+    val isCompanion = companionPackage != null
+
+    // Picks player names, defaulting to two placeholders when all blank
+    fun chosenNames() = players.filter { it.isNotBlank() }
+        .ifEmpty { listOf("Player 1", "Player 2") }
 
     Scaffold(
         topBar = {
@@ -65,28 +89,47 @@ fun NewGameWizardScreen(
             ) {
                 Button(
                     onClick = {
-                        val names = players.filter { it.isNotBlank() }
-                            .ifEmpty { listOf("Player 1", "Player 2") }
+                        val names = chosenNames()
+                        if (isCompanion) {
+                            // Hand off to the companion app (or prompt to install it)
+                            val pkg = companionPackage!!
+                            if (app.spiteBridge.isInstalled(pkg)) {
+                                names.forEach { app.playerRosterRepository.addPlayer(it) }
+                                app.gameTypeRepository.addType(gameType.trim())
+                                val playerObjs = names.mapIndexed { i, n -> Player("p$i", n, i) }
+                                app.spiteBridge.sendGameSetup(
+                                    targetPackage = pkg,
+                                    gameType = CompanionGames.tokenFor(gameType),
+                                    players = playerObjs
+                                )
+                                onBack()
+                            } else {
+                                showInstallDialog = true
+                            }
+                            return@Button
+                        }
                         // Map wizard player indices to final seat indices (skipping blanks)
                         val validIndices = players.indices.filter { players[it].isNotBlank() }
-                        val seatPairs = if (teamsEnabled) {
-                            teamPairs.mapNotNull { (a, b) ->
-                                val sa = validIndices.indexOf(a)
-                                val sb = validIndices.indexOf(b)
-                                if (sa >= 0 && sb >= 0) sa to sb else null
-                            }
+                        val seatTeams = if (teamsEnabled) {
+                            teamAssign.entries
+                                .filter { it.key in validIndices }
+                                .groupBy({ it.value }, { it.key })
+                                .values
+                                .map { group -> group.mapNotNull { idx ->
+                                    validIndices.indexOf(idx).takeIf { it >= 0 } } }
+                                .filter { it.size >= 2 }
                         } else emptyList()
                         onGameStarted(
                             "game_${System.currentTimeMillis()}",
                             names,
                             if (hasScoreLimit) playUntil.toIntOrNull() else null,
                             gameType.trim().ifBlank { null },
-                            seatPairs
+                            seatTeams
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = players.any { it.isNotBlank() } && !hasDuplicates
-                ) { Text("Start Game") }
+                ) { Text(if (isCompanion) "Play in ${gameType.trim()}" else "Start Game") }
             }
         }
     ) { padding ->
@@ -139,7 +182,23 @@ fun NewGameWizardScreen(
                 }
             }
 
-            if (players.filter { it.isNotBlank() }.size >= 4) {
+            if (isCompanion) {
+                HorizontalDivider()
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "🎲 ${gameType.trim()} is played in the ${gameType.trim()} app. " +
+                            "Tap below to launch it with these players.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            }
+
+            if (!isCompanion && players.filter { it.isNotBlank() }.size >= 4) {
                 HorizontalDivider()
                 Text("Teams (optional)", style = MaterialTheme.typography.titleMedium)
 
@@ -148,8 +207,8 @@ fun NewGameWizardScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text("Play as partners", style = MaterialTheme.typography.bodyLarge)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Play as teams", style = MaterialTheme.typography.bodyLarge)
                         Text(
                             if (teamsEnabled) "Scores are shared within each team"
                             else "All players score individually",
@@ -161,107 +220,135 @@ fun NewGameWizardScreen(
                         checked = teamsEnabled,
                         onCheckedChange = { enabled ->
                             teamsEnabled = enabled
-                            if (enabled && teamPairs.isEmpty()) {
-                                // Default: pair up players in order (0&1, 2&3, …)
-                                val validIndices = players.indices.filter { players[it].isNotBlank() }
-                                teamPairs = (0 until validIndices.size / 2)
-                                    .map { i -> validIndices[i * 2] to validIndices[i * 2 + 1] }
+                            selectedIdx = null
+                            if (enabled && teamAssign.isEmpty()) {
+                                // Sensible default: pair players up in order (1&2, 3&4, …)
+                                val valid = players.indices.filter { players[it].isNotBlank() }
+                                val m = mutableMapOf<Int, Int>()
+                                var t = 1
+                                var i = 0
+                                while (i + 1 < valid.size) {
+                                    m[valid[i]] = t; m[valid[i + 1]] = t; t++; i += 2
+                                }
+                                teamAssign = m
+                                nextTeamId = t
                             }
-                            if (!enabled) teamPairs = emptyList()
+                            if (!enabled) teamAssign = emptyMap()
                         }
                     )
                 }
 
                 if (teamsEnabled) {
                     val validIndices = players.indices.filter { players[it].isNotBlank() }
+                    fun nameOf(idx: Int) =
+                        players.getOrNull(idx)?.ifBlank { "Player ${idx + 1}" } ?: "Player ${idx + 1}"
 
-                    // Returns the partner index for [idx], if one exists
-                    fun partnerOf(idx: Int): Int? {
-                        val pair = teamPairs.find { (a, b) -> a == idx || b == idx }
-                        return pair?.let { (a, b) -> if (a == idx) b else a }
+                    // Stable team numbering: sort the live team ids and number them 1..n
+                    val orderedTeamIds = teamAssign.entries
+                        .filter { it.key in validIndices }
+                        .groupBy({ it.value }, { it.key })
+                        .filter { it.value.size >= 2 }
+                        .keys.sorted()
+                    fun teamNumber(tid: Int) = orderedTeamIds.indexOf(tid) + 1
+
+                    fun tapPlayer(idx: Int) {
+                        val sel = selectedIdx
+                        when {
+                            sel == null  -> { selectedIdx = idx; return }
+                            sel == idx   -> { selectedIdx = null; return }
+                        }
+                        val a = teamAssign[sel!!]
+                        val b = teamAssign[idx]
+                        val m = teamAssign.toMutableMap()
+                        when {
+                            a == null && b == null -> {
+                                val t = nextTeamId; nextTeamId += 1
+                                m[sel] = t; m[idx] = t
+                            }
+                            a != null && b == null -> m[idx] = a
+                            a == null && b != null -> m[sel] = b
+                            a != null && b != null && a != b ->
+                                // Merge the selected player's team into the tapped one
+                                m.filter { it.value == a }.keys.forEach { m[it] = b }
+                        }
+                        teamAssign = m
+                        selectedIdx = null
                     }
 
-                    // Link [idx] ↔ [partnerIdx], cascading any existing pairings for both.
-                    // Pass null to clear [idx]'s partner.
-                    fun setPartner(idx: Int, partnerIdx: Int?) {
-                        var updated = teamPairs.filter { (a, b) -> a != idx && b != idx }
-                        if (partnerIdx != null) {
-                            updated = updated.filter { (a, b) -> a != partnerIdx && b != partnerIdx }
-                            updated = updated + (idx to partnerIdx)
-                        }
-                        teamPairs = updated
+                    fun removeFromTeam(idx: Int) {
+                        val t = teamAssign[idx] ?: return
+                        val m = teamAssign.toMutableMap()
+                        m.remove(idx)
+                        val rest = m.filter { it.value == t }.keys
+                        if (rest.size <= 1) rest.forEach { m.remove(it) }   // dissolve lone member
+                        teamAssign = m
+                        if (selectedIdx == idx) selectedIdx = null
                     }
 
-                    validIndices.forEach { idx ->
-                        val playerName  = players[idx].ifBlank { "Player ${idx + 1}" }
-                        val partnerIdx  = partnerOf(idx)
-                        val partnerName = partnerIdx?.let {
-                            players.getOrNull(it)?.ifBlank { "Player ${it + 1}" }
-                        }
-                        val otherValid  = validIndices.filter { it != idx }
-                        var expanded    by remember(idx) { mutableStateOf(false) }
+                    Text(
+                        if (selectedIdx != null)
+                            "Tap another player to team up with ${nameOf(selectedIdx!!)}."
+                        else
+                            "Tap two players to make a team. Tap a third to add them in. ✕ removes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
 
-                        ExposedDropdownMenuBox(
-                            expanded        = expanded,
-                            onExpandedChange = { expanded = it }
-                        ) {
-                            OutlinedTextField(
-                                value         = partnerName ?: "No partner",
-                                onValueChange = {},
-                                readOnly      = true,
-                                label         = { Text(playerName) },
-                                trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                                modifier      = Modifier
-                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                                    .fillMaxWidth(),
-                                colors = if (partnerName != null)
-                                    OutlinedTextFieldDefaults.colors(
-                                        unfocusedBorderColor       = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                                        unfocusedLabelColor        = MaterialTheme.colorScheme.primary,
-                                        unfocusedTrailingIconColor = MaterialTheme.colorScheme.primary
-                                    )
-                                else OutlinedTextFieldDefaults.colors()
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        validIndices.forEach { idx ->
+                            val tid = teamAssign[idx]?.takeIf { it in orderedTeamIds }
+                            PlayerTeamChip(
+                                name      = nameOf(idx),
+                                teamLabel = tid?.let { teamNumber(it).toString() },
+                                teamColor = tid?.let { teamColor(teamNumber(it)) },
+                                selected  = selectedIdx == idx,
+                                onClick   = { tapPlayer(idx) },
+                                onRemove  = if (tid != null) ({ removeFromTeam(idx) }) else null
                             )
-                            ExposedDropdownMenu(
-                                expanded         = expanded,
-                                onDismissRequest = { expanded = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "No partner",
-                                            color = if (partnerIdx == null)
-                                                MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                        )
-                                    },
-                                    onClick = { setPartner(idx, null); expanded = false }
-                                )
-                                HorizontalDivider()
-                                otherValid.forEach { candidateIdx ->
-                                    val candidateName = players.getOrNull(candidateIdx)
-                                        ?.ifBlank { "Player ${candidateIdx + 1}" } ?: "?"
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                candidateName,
-                                                color = if (partnerIdx == candidateIdx)
-                                                    MaterialTheme.colorScheme.primary
-                                                else MaterialTheme.colorScheme.onSurface
-                                            )
-                                        },
-                                        onClick = {
-                                            if (partnerIdx != candidateIdx) setPartner(idx, candidateIdx)
-                                            expanded = false
-                                        }
+                        }
+                    }
+
+                    // Live summary of the resulting teams
+                    val groups = orderedTeamIds.map { tid ->
+                        tid to validIndices.filter { teamAssign[it] == tid }.sorted()
+                    }
+                    val solo = validIndices.filter { teamAssign[it] !in orderedTeamIds }
+
+                    if (groups.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            groups.forEach { (tid, members) ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .clip(CircleShape)
+                                            .background(teamColor(teamNumber(tid)))
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Team ${teamNumber(tid)}: " +
+                                            members.joinToString(" & ") { nameOf(it) },
+                                        style = MaterialTheme.typography.bodyMedium
                                     )
                                 }
                             }
+                            if (solo.isNotEmpty()) {
+                                Text(
+                                    "Solo: " + solo.joinToString(", ") { nameOf(it) },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
                         }
+                        TextButton(
+                            onClick = { teamAssign = emptyMap(); selectedIdx = null },
+                            contentPadding = PaddingValues(0.dp)
+                        ) { Text("Clear teams") }
                     }
                 }
             }
 
+            if (!isCompanion) {
             HorizontalDivider()
 
             Text("Game options", style = MaterialTheme.typography.titleMedium)
@@ -299,7 +386,31 @@ fun NewGameWizardScreen(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
             }
+            } // end !isCompanion game options
         }
+    }
+
+    if (showInstallDialog && companionPackage != null) {
+        val appName = gameType.trim()
+        AlertDialog(
+            onDismissRequest = { showInstallDialog = false },
+            title = { Text("Get $appName") },
+            text = {
+                Text(
+                    "$appName is played in its own app. Install it to play — your " +
+                        "results come back to SpiteScore automatically."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showInstallDialog = false
+                    app.spiteBridge.openInPlayStore(companionPackage)
+                }) { Text("Install") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showInstallDialog = false }) { Text("Not now") }
+            }
+        )
     }
 }
 
@@ -400,6 +511,78 @@ private fun PlayerPickerField(
                         onClick = { onValueChange(playerName); expanded = false }
                     )
                 }
+            }
+        }
+    }
+}
+
+// Distinct, reused across the wizard summary, the chips, and the in-game editor.
+private val TeamColors = listOf(
+    Color(0xFF1E88E5), // blue
+    Color(0xFFE53935), // red
+    Color(0xFF43A047), // green
+    Color(0xFFFB8C00), // orange
+    Color(0xFF8E24AA), // purple
+    Color(0xFF00897B), // teal
+)
+
+/** Color for team display-number [number] (1-based), cycling if there are many teams. */
+fun teamColor(number: Int): Color =
+    TeamColors[(number - 1).coerceAtLeast(0) % TeamColors.size]
+
+/** A tappable player chip showing its team color/number, with an optional ✕ to unteam. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlayerTeamChip(
+    name: String,
+    teamLabel: String?,
+    teamColor: Color?,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onRemove: (() -> Unit)?
+) {
+    val borderColor = when {
+        selected           -> MaterialTheme.colorScheme.primary
+        teamColor != null  -> teamColor
+        else               -> MaterialTheme.colorScheme.outline
+    }
+    val bg = when {
+        selected           -> MaterialTheme.colorScheme.primaryContainer
+        teamColor != null  -> teamColor.copy(alpha = 0.12f)
+        else               -> MaterialTheme.colorScheme.surface
+    }
+    Surface(
+        onClick = onClick,
+        shape   = RoundedCornerShape(50),
+        color   = bg,
+        border  = BorderStroke(if (selected) 2.dp else 1.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (teamColor != null) {
+                Box(
+                    modifier = Modifier.size(10.dp).clip(CircleShape).background(teamColor)
+                )
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(name, style = MaterialTheme.typography.bodyMedium)
+            if (teamLabel != null) {
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "T$teamLabel",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = teamColor ?: MaterialTheme.colorScheme.primary
+                )
+            }
+            if (onRemove != null) {
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Remove from team",
+                    modifier = Modifier.size(16.dp).clickable { onRemove() }
+                )
             }
         }
     }

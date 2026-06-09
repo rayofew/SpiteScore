@@ -16,7 +16,8 @@ data class ActiveGameState(
     val playUntil: Int? = null,
     val gameType: String? = null,
     val startedAt: Long = System.currentTimeMillis(),
-    val partnerships: Map<String, String> = emptyMap(),  // "seat" → "partnerSeat", bidirectional
+    val partnerships: Map<String, String> = emptyMap(),  // legacy: "seat" → "partnerSeat" (pairs only)
+    val teams: Map<String, Int> = emptyMap(),            // "seat" → teamId; absent = plays solo
     val scoreLog: List<ScoreLogEntry> = emptyList()
 )
 

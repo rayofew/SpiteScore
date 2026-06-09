@@ -14,4 +14,4 @@ data class GameSetupPayload(
 )
 
 @Serializable
-data class SetupPlayer(val name: String)
+data class SetupPlayer(val name: String, val id: String = "")

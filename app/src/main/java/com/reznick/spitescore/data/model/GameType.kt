@@ -1,19 +1,22 @@
 package com.reznick.spitescore.data.model
 
-enum class GameType(val displayName: String, val supportsSpiteCards: Boolean = false) {
-    CASSINO("Cassino", supportsSpiteCards = true),
-    CRIBBAGE("Cribbage", supportsSpiteCards = true),
-    GARBAGE("Garbage", supportsSpiteCards = true),
+enum class GameType(val displayName: String) {
+    CASSINO("Cassino"),
+    CRIBBAGE("Cribbage"),
+    GARBAGE("Garbage"),
     HEARTS("Hearts"),
     SPADES("Spades"),
-    YAHTZEE("Yahtzee"),
+    YATZY("Yatzy"),
     FARKLE("Farkle"),
     DICE10K("Dice 10,000"),
-    FREEFORM("Free-form", supportsSpiteCards = true);
+    FREEFORM("Free-form");
 
     companion object {
         fun fromString(value: String): GameType? =
-            entries.firstOrNull { it.name.lowercase() == value.lowercase() }
+            entries.firstOrNull {
+                it.name.equals(value, ignoreCase = true) ||
+                    it.displayName.equals(value, ignoreCase = true)
+            }
     }
 }
 
@@ -21,7 +24,6 @@ enum class ScoringMode(val displayName: String) {
     MANUAL("Manual entry"),
     CASSINO_STRUCTURED("Cassino scoring"),
     CRIBBAGE_BOARD("Cribbage board"),
-    YAHTZEE_CARD("Yahtzee scorecard"),
     RUNNING_TOTAL("Running total")
 }
 

@@ -13,6 +13,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -50,6 +51,8 @@ import com.reznick.spitescore.data.model.Player
 import com.reznick.spitescore.data.model.ScoreLogEntry
 import com.reznick.spitescore.ui.theme.DeltaNegative
 import com.reznick.spitescore.ui.theme.DeltaPositive
+import com.reznick.spitescore.ui.wizard.PlayerTeamChip
+import com.reznick.spitescore.ui.wizard.teamColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -162,10 +165,7 @@ fun GameScreen(
                 viewModel.players.filter { viewModel.primarySeat(it.seat) == it.seat },
                 key = { it.id }
             ) { player ->
-                val partnerSeat   = viewModel.partnerships[player.seat]
-                val partnerPlayer = partnerSeat?.let { s -> viewModel.players.find { it.seat == s } }
-                val teamName      = if (partnerPlayer != null)
-                    "${player.name} & ${partnerPlayer.name}" else player.name
+                val teamName   = viewModel.teamDisplayName(player.seat)
                 val isSelected = player.seat == viewModel.selectedSeat
                 val isLeader   = player.seat == viewModel.leader
                 val nameColor  = if (isLeader) MaterialTheme.colorScheme.primary
@@ -237,7 +237,7 @@ fun GameScreen(
                     ) {
                         Icon(Icons.Default.Link, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Partners")
+                        Text("Teams")
                     }
                 }
             }
@@ -366,12 +366,12 @@ fun GameScreen(
     }
 
     if (showPartners) {
-        ManagePartnersDialog(
-            players      = viewModel.players,
-            partnerships = viewModel.partnerships,
-            onLink       = { a, b -> viewModel.linkPlayers(a, b) },
-            onUnlink     = { seat -> viewModel.unlinkPlayers(seat) },
-            onDismiss    = { showPartners = false }
+        ManageTeamsDialog(
+            players     = viewModel.players,
+            teamIdOf    = { seat -> viewModel.teams[seat] },
+            onLink      = { seat, anchor -> viewModel.linkToTeam(seat, anchor) },
+            onLeave     = { seat -> viewModel.leaveTeam(seat) },
+            onDismiss   = { showPartners = false }
         )
     }
 
@@ -753,98 +753,65 @@ private fun EndGameDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ManagePartnersDialog(
+private fun ManageTeamsDialog(
     players: List<Player>,
-    partnerships: Map<Int, Int>,
-    onLink: (Int, Int) -> Unit,
-    onUnlink: (Int) -> Unit,
+    teamIdOf: (Int) -> Int?,
+    onLink: (seat: Int, anchor: Int) -> Unit,
+    onLeave: (seat: Int) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var selectedSeat by remember { mutableStateOf<Int?>(null) }
+
+    // Stable 1..n numbering of the live team ids
+    val orderedTeamIds = players.mapNotNull { teamIdOf(it.seat) }.distinct().sorted()
+    fun teamNumber(tid: Int) = orderedTeamIds.indexOf(tid) + 1
+
+    fun tap(seat: Int) {
+        val sel = selectedSeat
+        when {
+            sel == null -> selectedSeat = seat
+            sel == seat -> selectedSeat = null
+            else -> {
+                // Link the solo of the pair onto the other. If both are solo this
+                // forms a new team; if one is teamed, the solo joins that team.
+                val selSolo  = teamIdOf(sel) == null
+                val seatSolo = teamIdOf(seat) == null
+                when {
+                    selSolo            -> onLink(sel, seat)
+                    seatSolo           -> onLink(seat, sel)
+                    else               -> { /* both already teamed — remove one first */ }
+                }
+                selectedSeat = null
+            }
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Partners") },
+        title = { Text("Teams") },
         text  = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "Pick a partner for each player. Scores are shared within a team.",
+                    if (selectedSeat != null)
+                        "Tap another player to team them up. ✕ removes a player from their team."
+                    else
+                        "Tap two players to make a team. Tap a third to add them in. ✕ removes.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
-
-                players.forEach { player ->
-                    val currentPartnerSeat = partnerships[player.seat]
-                    val currentPartner     = currentPartnerSeat?.let { s -> players.find { it.seat == s } }
-
-                    var expanded by remember(player.seat) { mutableStateOf(false) }
-
-                    ExposedDropdownMenuBox(
-                        expanded          = expanded,
-                        onExpandedChange  = { expanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value        = currentPartner?.name ?: "No partner",
-                            onValueChange = {},
-                            readOnly     = true,
-                            label        = { Text(player.name) },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                            modifier     = Modifier
-                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                                .fillMaxWidth(),
-                            colors = if (currentPartner != null)
-                                OutlinedTextFieldDefaults.colors(
-                                    unfocusedBorderColor  = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                                    unfocusedLabelColor   = MaterialTheme.colorScheme.primary,
-                                    unfocusedTrailingIconColor = MaterialTheme.colorScheme.primary
-                                )
-                            else OutlinedTextFieldDefaults.colors()
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    players.forEach { player ->
+                        val tid = teamIdOf(player.seat)
+                        PlayerTeamChip(
+                            name      = player.name,
+                            teamLabel = tid?.let { teamNumber(it).toString() },
+                            teamColor = tid?.let { teamColor(teamNumber(it)) },
+                            selected  = selectedSeat == player.seat,
+                            onClick   = { tap(player.seat) },
+                            onRemove  = if (tid != null) ({ onLeave(player.seat); selectedSeat = null }) else null
                         )
-
-                        ExposedDropdownMenu(
-                            expanded         = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            // "No partner" — unlinks if currently paired
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "No partner",
-                                        color = if (currentPartner == null)
-                                            MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                    )
-                                },
-                                onClick = {
-                                    if (currentPartnerSeat != null) onUnlink(player.seat)
-                                    expanded = false
-                                }
-                            )
-                            HorizontalDivider()
-                            // All other players — selecting one handles any cascading unlinks
-                            players.filter { it.seat != player.seat }.forEach { candidate ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            candidate.name,
-                                            color = if (currentPartnerSeat == candidate.seat)
-                                                MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    onClick = {
-                                        if (currentPartnerSeat != candidate.seat) {
-                                            // Unlink player's existing partner
-                                            if (currentPartnerSeat != null) onUnlink(player.seat)
-                                            // Unlink candidate's existing partner
-                                            if (partnerships.containsKey(candidate.seat)) onUnlink(candidate.seat)
-                                            onLink(player.seat, candidate.seat)
-                                        }
-                                        expanded = false
-                                    }
-                                )
-                            }
-                        }
                     }
                 }
             }

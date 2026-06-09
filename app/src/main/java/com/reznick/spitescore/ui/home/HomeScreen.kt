@@ -20,10 +20,12 @@ fun HomeScreen(
     hasSavedGame: Boolean,
     onNewGame: () -> Unit,
     onContinueGame: () -> Unit,
+    onSaveResult: () -> Unit,
     onStats: () -> Unit,
     onSettings: () -> Unit,
     onAbout: () -> Unit
 ) {
+    var resultSaved by remember { mutableStateOf(false) }
     Scaffold { padding ->
         Column(
             modifier = Modifier
@@ -48,10 +50,10 @@ fun HomeScreen(
                 modifier = Modifier.padding(bottom = 48.dp)
             )
 
-            if (incomingResult != null) {
+            if (incomingResult != null && !resultSaved) {
                 SpiteCardsResultBanner(
                     result = incomingResult,
-                    onNewGame = onNewGame,
+                    onSave = { onSaveResult(); resultSaved = true },
                     modifier = Modifier.padding(bottom = 24.dp)
                 )
             }
@@ -106,12 +108,17 @@ fun HomeScreen(
 @Composable
 private fun SpiteCardsResultBanner(
     result: GameResultPayload,
-    onNewGame: () -> Unit,
+    onSave: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Game received from SpiteCards", style = MaterialTheme.typography.titleLarge)
+            val source = when (result.sourceApp) {
+                "spiteyatzy" -> "SpiteYatzy"
+                "spitecards" -> "SpiteCards"
+                else         -> result.sourceApp.ifBlank { "a companion app" }
+            }
+            Text("Game received from $source", style = MaterialTheme.typography.titleLarge)
             Text(
                 "${result.gameType.replaceFirstChar { it.uppercase() }} · ${result.players.size} players",
                 style = MaterialTheme.typography.bodyMedium
@@ -127,7 +134,7 @@ private fun SpiteCardsResultBanner(
                 )
             }
             Spacer(Modifier.height(4.dp))
-            Button(onClick = onNewGame, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
                 Text("Save to history")
             }
         }

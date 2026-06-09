@@ -67,6 +67,7 @@ fun StatsScreen(onBack: () -> Unit) {
     val scope      = rememberCoroutineScope()
 
     var detailTarget by remember { mutableStateOf<DetailTarget?>(null) }
+    var scorecardSession by remember { mutableStateOf<GameSessionEntity?>(null) }
 
     Scaffold(
         topBar = {
@@ -115,6 +116,10 @@ fun StatsScreen(onBack: () -> Unit) {
 
                     val rawPlayerStats = remember(typeSessions) { computePlayerStats(typeSessions) }
                     val h2hRecords     = remember(typeSessions) { computeHeadToHead(typeSessions) }
+                    val scorecardSessions = remember(typeSessions) {
+                        typeSessions.filter { hasScorecards(it) }.sortedByDescending { it.startedAt }
+                    }
+                    val yatzyStats = remember(scorecardSessions) { computeYatzyStats(scorecardSessions) }
 
                     var sortBy by remember { mutableStateOf(PlayerSortBy.WINS) }
                     val playerStats = remember(rawPlayerStats, sortBy) {
@@ -157,6 +162,16 @@ fun StatsScreen(onBack: () -> Unit) {
                                 }
                             }
                         }
+
+                        // Yatzy-specific section: only for games that sent a full scorecard
+                        if (scorecardSessions.isNotEmpty()) {
+                            item { Text("Yatzy Stats", style = MaterialTheme.typography.titleMedium) }
+                            item { YatzyStatsCard(yatzyStats) }
+                            item { Text("Scorecards", style = MaterialTheme.typography.titleMedium) }
+                            items(scorecardSessions, key = { it.id }) { session ->
+                                ScorecardListRow(session) { scorecardSession = session }
+                            }
+                        }
                     }
                 }
             }
@@ -173,6 +188,42 @@ fun StatsScreen(onBack: () -> Unit) {
                 is DetailTarget.Player -> PlayerDetailContent(target.name, target.sessions)
                 is DetailTarget.H2H   -> H2HDetailContent(target.rec, target.sessions)
             }
+        }
+    }
+
+    scorecardSession?.let { session ->
+        ScorecardDialog(session = session, onDismiss = { scorecardSession = null })
+    }
+}
+
+// ── Scorecard list row ──────────────────────────────────────────────────────────
+
+@Composable
+private fun ScorecardListRow(session: GameSessionEntity, onClick: () -> Unit) {
+    val winners = sessionWinners(session)
+    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(dateFormat.format(Date(session.startedAt)), style = MaterialTheme.typography.bodyMedium)
+                if (winners.isNotEmpty()) {
+                    Text(
+                        "🏆 ${winners.joinToString(", ")}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Text(
+                "View",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }

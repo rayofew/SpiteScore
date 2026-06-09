@@ -8,13 +8,13 @@ import com.reznick.spitescore.data.repository.GameTypeRepository
 import com.reznick.spitescore.data.repository.PlayerRosterRepository
 import com.reznick.spitescore.data.repository.SavedSetupRepository
 import com.reznick.spitescore.data.repository.ThemeRepository
-import com.reznick.spitescore.integration.spitecards.SpiteCardsBridge
+import com.reznick.spitescore.integration.spitecards.SpiteBridge
 
 class SpiteScoreApp : Application() {
     val database by lazy { SpiteScoreDatabase.get(this) }
     val gameHistoryRepository by lazy { GameHistoryRepository(database.gameSessionDao()) }
     val savedSetupRepository by lazy { SavedSetupRepository(database.savedSetupDao()) }
-    val spiteCardsBridge by lazy { SpiteCardsBridge(this) }
+    val spiteBridge by lazy { SpiteBridge(this) }
     val activeGameRepository by lazy { ActiveGameRepository(this) }
     val playerRosterRepository by lazy { PlayerRosterRepository(this) }
     val gameTypeRepository by lazy { GameTypeRepository(this) }

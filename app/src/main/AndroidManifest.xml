@@ -3,9 +3,10 @@
 
     <!-- Intentionally no android.permission.INTERNET -->
 
-    <!-- Detect SpiteCards installation (Android 11+ package visibility) -->
+    <!-- Detect companion-app installation (Android 11+ package visibility) -->
     <queries>
         <package android:name="com.reznick.spitecards" />
+        <package android:name="com.reznick.spiteyatzy" />
     </queries>
 
     <application

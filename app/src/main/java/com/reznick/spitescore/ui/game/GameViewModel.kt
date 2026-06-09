@@ -63,12 +63,36 @@ class GameViewModel(
         mutableStateMapOf<Int, Int>().also { m -> players.forEach { m[it.seat] = 0 } }
     }
 
-    /** Bidirectional: seatA → seatB and seatB → seatA when they are partners. */
-    val partnerships = if (savedState != null) {
-        mutableStateMapOf(*savedState.partnerships.entries
-            .map { it.key.toInt() to it.value.toInt() }.toTypedArray())
+    /**
+     * Team membership: seat → teamId. A seat with no entry plays solo (its own
+     * team). All members of one team share a single score, held on the team's
+     * lowest seat (see [primarySeat]). Teams may be any size.
+     */
+    val teams = if (savedState != null) {
+        val stored = savedState.teams.entries.map { it.key.toInt() to it.value }
+        val resolved = stored.ifEmpty {
+            // Migrate legacy pair-based saves into the team model
+            migratePairsToTeams(savedState.partnerships)
+        }
+        mutableStateMapOf(*resolved.toTypedArray())
     } else {
         mutableStateMapOf()
+    }
+
+    private var nextTeamId = (teams.values.maxOrNull() ?: 0) + 1
+
+    /** Convert a legacy bidirectional partner map into seat → teamId entries. */
+    private fun migratePairsToTeams(pairs: Map<String, String>): List<Pair<Int, Int>> {
+        val assigned = mutableMapOf<Int, Int>()
+        var tid = 1
+        pairs.forEach { (k, v) ->
+            val a = k.toIntOrNull() ?: return@forEach
+            val b = v.toIntOrNull() ?: return@forEach
+            val id = assigned[a] ?: assigned[b] ?: tid++
+            assigned[a] = id
+            assigned[b] = id
+        }
+        return assigned.entries.map { it.key to it.value }
     }
 
     var selectedSeat by mutableIntStateOf(
@@ -102,22 +126,24 @@ class GameViewModel(
     private val _events = Channel<GameEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
 
-    // ── Partnership helpers ────────────────────────────────────────────────
+    // ── Team helpers ───────────────────────────────────────────────────────
+
+    /** All seats on [seat]'s team, sorted ascending. Solo seats return just themselves. */
+    fun teamMembers(seat: Int): List<Int> {
+        val tid = teams[seat] ?: return listOf(seat)
+        return teams.entries.filter { it.value == tid }.map { it.key }.sorted()
+    }
 
     /**
-     * The canonical score-holding seat for [seat]'s team.
-     * Always the numerically lower seat of the two partners.
+     * The canonical score-holding seat for [seat]'s team — the numerically
+     * lowest member. Solo seats are their own primary.
      */
-    fun primarySeat(seat: Int): Int = minOf(seat, partnerships[seat] ?: seat)
+    fun primarySeat(seat: Int): Int = teamMembers(seat).first()
 
-    /** Human-readable name for the team that [seat] belongs to. */
-    fun teamDisplayName(seat: Int): String {
-        val ps          = primarySeat(seat)
-        val primaryName = players.find { it.seat == ps }?.name ?: ""
-        val partnerSeat = partnerships[ps]
-        val partnerName = partnerSeat?.let { s -> players.find { it.seat == s }?.name }
-        return if (partnerName != null) "$primaryName & $partnerName" else primaryName
-    }
+    /** Human-readable name for the team that [seat] belongs to (all members joined). */
+    fun teamDisplayName(seat: Int): String =
+        teamMembers(seat).mapNotNull { s -> players.find { it.seat == s }?.name }
+            .joinToString(" & ")
 
     // ── Computed helpers (auto-tracked in Compose) ────────────────────────
 
@@ -163,8 +189,7 @@ class GameViewModel(
                 playUntil    = playUntil,
                 gameType     = currentGameType,
                 startedAt    = startedAt,
-                partnerships = partnerships.entries
-                    .associate { (k, v) -> k.toString() to v.toString() },
+                teams        = teams.entries.associate { (k, v) -> k.toString() to v },
                 scoreLog     = scoreLog.toList()
             )
         )
@@ -265,8 +290,8 @@ class GameViewModel(
     }
 
     fun removePlayer(player: Player) {
-        // Unlink first so both sides get independent score entries
-        if (partnerships.containsKey(player.seat)) unlinkPlayers(player.seat)
+        // Leave any team first so the seat keeps its own independent score entry
+        if (teams.containsKey(player.seat)) leaveTeam(player.seat)
         commitSession(player.seat)
         val fallback = players
             .filter { it.seat != player.seat }
@@ -298,50 +323,59 @@ class GameViewModel(
         saveGame()
     }
 
-    // ── Partnership management ─────────────────────────────────────────────
+    // ── Team management ────────────────────────────────────────────────────
 
     /**
-     * Link [seatA] and [seatB] as partners. Their scores are merged into the
-     * lower-numbered seat (the primary). Both must currently be unlinked.
+     * Add the (currently solo) [seat] onto [anchor]'s team, creating the team
+     * if [anchor] is also solo. The joining seat's score is merged into the
+     * team's primary seat. No-op if [seat] is already on a team.
      */
-    fun linkPlayers(seatA: Int, seatB: Int) {
-        if (seatA == seatB) return
-        if (partnerships.containsKey(seatA) || partnerships.containsKey(seatB)) return
+    fun linkToTeam(seat: Int, anchor: Int) {
+        if (seat == anchor) return
+        if (teams.containsKey(seat)) return  // must currently be solo
 
-        val primary   = minOf(seatA, seatB)
-        val secondary = maxOf(seatA, seatB)
+        commitSession(seat)
+        commitSession(anchor)
 
-        commitSession(seatA)
-        commitSession(seatB)
+        val targetId      = teams[anchor] ?: nextTeamId++
+        val targetPrimary = primarySeat(anchor)   // primary before [seat] joins
 
-        // Merge scores into primary seat
-        val combined = (scores[primary] ?: 0) + (scores[secondary] ?: 0)
-        scores[primary] = combined
-        scores.remove(secondary)
-        flashDelta.remove(secondary)
+        teams[anchor] = targetId
+        teams[seat]   = targetId
 
-        partnerships[seatA] = seatB
-        partnerships[seatB] = seatA
+        val newPrimary = minOf(targetPrimary, seat)
+        val combined   = (scores[targetPrimary] ?: 0) + (scores[seat] ?: 0)
+        if (newPrimary != targetPrimary) scores.remove(targetPrimary)
+        if (newPrimary != seat)          scores.remove(seat)
+        scores[newPrimary] = combined
+        flashDelta.remove(if (newPrimary == seat) targetPrimary else seat)
 
-        if (selectedSeat == secondary) selectedSeat = primary
+        if (selectedSeat == seat || selectedSeat == targetPrimary) selectedSeat = newPrimary
         saveGame()
     }
 
     /**
-     * Remove the partnership for [seat]'s team. Both players keep the shared
-     * score and resume as independent scorers.
+     * Remove [seat] from its team. The leaving seat and the remaining team both
+     * keep the shared score and resume scoring independently. A team that drops
+     * to a single member is dissolved (that member becomes solo).
      */
-    fun unlinkPlayers(seat: Int) {
-        val partner   = partnerships[seat] ?: return
-        val primary   = primarySeat(seat)
-        val secondary = if (seat == primary) partner else seat
-        val shared    = scores[primary] ?: 0
+    fun leaveTeam(seat: Int) {
+        val tid     = teams[seat] ?: return
+        val primary = primarySeat(seat)
+        val shared  = scores[primary] ?: 0
 
-        partnerships.remove(seat)
-        partnerships.remove(partner)
+        commitSession(primary)
+        teams.remove(seat)
 
-        scores[primary]   = shared
-        scores[secondary] = shared
+        val remaining = teams.entries.filter { it.value == tid }.map { it.key }
+        if (remaining.size <= 1) remaining.forEach { teams.remove(it) }
+
+        // The leaving seat becomes solo with the shared score…
+        scores[seat] = shared
+        // …and the remaining team (or now-solo last member) keeps it on its primary.
+        remaining.minOrNull()?.let { scores[it] = shared }
+
+        if (selectedSeat == primary) selectedSeat = primarySeat(seat)
         saveGame()
     }
 

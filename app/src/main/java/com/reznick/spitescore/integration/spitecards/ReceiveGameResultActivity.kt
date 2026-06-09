@@ -8,7 +8,7 @@ class ReceiveGameResultActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val bridge = SpiteCardsBridge(applicationContext)
+        val bridge = SpiteBridge(applicationContext)
         bridge.parseIncomingGameResult(intent)
             .onSuccess { result ->
                 val mainIntent = android.content.Intent(this, MainActivity::class.java).apply {

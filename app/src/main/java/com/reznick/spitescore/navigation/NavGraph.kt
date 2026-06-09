@@ -7,7 +7,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -57,6 +59,7 @@ fun SpiteScoreNavHost(
         composable(Screen.Home.route) {
             val app = LocalContext.current.applicationContext as SpiteScoreApp
             val repo = app.activeGameRepository
+            val scope = rememberCoroutineScope()
             HomeScreen(
                 incomingResult = incomingResult,
                 hasSavedGame = repo.hasGame(),
@@ -70,6 +73,11 @@ fun SpiteScoreNavHost(
                         navController.navigate(Screen.Game.route(saved.gameId, saved.players.map { it.name }))
                     }
                 },
+                onSaveResult = {
+                    incomingResult?.let { result ->
+                        scope.launch { app.gameHistoryRepository.saveReceivedResult(result) }
+                    }
+                },
                 onStats = { navController.navigate(Screen.Stats.route) },
                 onSettings = { navController.navigate(Screen.Settings.route) },
                 onAbout = { navController.navigate(Screen.About.route) }
@@ -78,12 +86,12 @@ fun SpiteScoreNavHost(
         composable(Screen.NewGameWizard.route) {
             val app = LocalContext.current.applicationContext as SpiteScoreApp
             NewGameWizardScreen(
-                onGameStarted = { gameId, playerNames, playUntil, gameType, pairings ->
+                onGameStarted = { gameId, playerNames, playUntil, gameType, teamGroups ->
                     val playerList = playerNames.mapIndexed { i, name -> Player("p$i", name, i) }
-                    // Convert seat-pair list to bidirectional map for storage
-                    val partnershipMap = pairings
-                        .flatMap { (a, b) ->
-                            listOf(a.toString() to b.toString(), b.toString() to a.toString())
+                    // Each group is a list of seat indices; flatten to seat → teamId
+                    val teamMap = teamGroups
+                        .flatMapIndexed { idx, group ->
+                            group.map { seat -> seat.toString() to (idx + 1) }
                         }
                         .toMap()
                     app.activeGameRepository.save(
@@ -95,7 +103,7 @@ fun SpiteScoreNavHost(
                             playUntil    = playUntil,
                             gameType     = gameType,
                             startedAt    = System.currentTimeMillis(),
-                            partnerships = partnershipMap
+                            teams        = teamMap
                         )
                     )
                     playerNames.forEach { app.playerRosterRepository.addPlayer(it) }
