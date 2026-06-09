@@ -1,5 +1,8 @@
 package com.reznick.spitescore.ui.about
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -8,11 +11,18 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.reznick.spitescore.BuildConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    fun openUrl(url: String) {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -75,13 +85,27 @@ fun AboutScreen(onBack: () -> Unit) {
                 "free, no ads, no tracking, no accounts.",
                 style = MaterialTheme.typography.bodyMedium
             )
-            Text("· SpiteCards — virtual deck, links phones in the same room", style = MaterialTheme.typography.bodyMedium)
-            Text("· SpitePine — map and track your pine trees", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "· SpiteCards — virtual deck, links phones in the same room",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable {
+                    openUrl("https://play.google.com/store/search?q=spitecards&c=apps")
+                }
+            )
+            Text(
+                "· SpitePine — map and track your pine trees",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable {
+                    openUrl("https://play.google.com/store/search?q=spitepine&c=apps")
+                }
+            )
 
             HorizontalDivider()
 
             Text(
-                "Version 1.0",
+                "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
             )

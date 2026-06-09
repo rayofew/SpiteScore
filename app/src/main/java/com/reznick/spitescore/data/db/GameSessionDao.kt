@@ -20,4 +20,7 @@ interface GameSessionDao {
 
     @Query("DELETE FROM game_sessions WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("DELETE FROM game_sessions")
+    suspend fun deleteAll()
 }

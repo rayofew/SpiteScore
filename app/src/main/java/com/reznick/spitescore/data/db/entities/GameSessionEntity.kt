@@ -1,5 +1,6 @@
 package com.reznick.spitescore.data.db.entities
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -11,7 +12,8 @@ data class GameSessionEntity(
     val configJson: String,
     val playersJson: String,
     val entriesJson: String,
-    val winnerSeats: String,
+    /** Stores winner names (not seat numbers). Column kept as "winnerSeats" for DB compatibility. */
+    @ColumnInfo(name = "winnerSeats") val winnerNames: String,
     val startedAt: Long,
     val endedAt: Long,
     val durationSeconds: Long

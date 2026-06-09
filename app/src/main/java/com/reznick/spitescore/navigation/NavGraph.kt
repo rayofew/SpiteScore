@@ -1,18 +1,29 @@
 package com.reznick.spitescore.navigation
 
 import android.net.Uri
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.reznick.spitescore.SpiteScoreApp
+import com.reznick.spitescore.data.model.Player
+import com.reznick.spitescore.data.repository.ActiveGameState
+import com.reznick.spitescore.data.repository.ThemeMode
+// Uri is still used by Screen.Game.route() helper above
 import com.reznick.spitescore.integration.spitecards.GameResultPayload
 import com.reznick.spitescore.ui.about.AboutScreen
 import com.reznick.spitescore.ui.game.GameScreen
-import com.reznick.spitescore.ui.history.GameHistoryScreen
 import com.reznick.spitescore.ui.home.HomeScreen
 import com.reznick.spitescore.ui.settings.SettingsScreen
+import com.reznick.spitescore.ui.stats.StatsScreen
 import com.reznick.spitescore.ui.wizard.NewGameWizardScreen
 
 sealed class Screen(val route: String) {
@@ -22,29 +33,74 @@ sealed class Screen(val route: String) {
         fun route(gameId: String, players: List<String>) =
             "game/$gameId/${Uri.encode(players.joinToString("|"))}"
     }
-    object GameHistory : Screen("history")
+    object Stats : Screen("stats")
     object Settings : Screen("settings")
     object About : Screen("about")
 }
 
 @Composable
-fun SpiteScoreNavHost(incomingResult: GameResultPayload? = null) {
+fun SpiteScoreNavHost(
+    incomingResult: GameResultPayload? = null,
+    currentTheme: ThemeMode = ThemeMode.SYSTEM,
+    onThemeChange: (ThemeMode) -> Unit = {}
+) {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = Screen.Home.route) {
+    NavHost(
+        navController      = navController,
+        startDestination   = Screen.Home.route,
+        enterTransition    = { fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.95f) },
+        exitTransition     = { fadeOut(tween(150)) },
+        popEnterTransition = { fadeIn(tween(220)) },
+        popExitTransition  = { fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.95f) }
+    ) {
         composable(Screen.Home.route) {
+            val app = LocalContext.current.applicationContext as SpiteScoreApp
+            val repo = app.activeGameRepository
             HomeScreen(
                 incomingResult = incomingResult,
-                onNewGame = { navController.navigate(Screen.NewGameWizard.route) },
-                onHistory = { navController.navigate(Screen.GameHistory.route) },
+                hasSavedGame = repo.hasGame(),
+                onNewGame = {
+                    repo.clear()
+                    navController.navigate(Screen.NewGameWizard.route)
+                },
+                onContinueGame = {
+                    val saved = repo.load()
+                    if (saved != null) {
+                        navController.navigate(Screen.Game.route(saved.gameId, saved.players.map { it.name }))
+                    }
+                },
+                onStats = { navController.navigate(Screen.Stats.route) },
                 onSettings = { navController.navigate(Screen.Settings.route) },
                 onAbout = { navController.navigate(Screen.About.route) }
             )
         }
         composable(Screen.NewGameWizard.route) {
+            val app = LocalContext.current.applicationContext as SpiteScoreApp
             NewGameWizardScreen(
-                onGameStarted = { gameId, players ->
-                    navController.navigate(Screen.Game.route(gameId, players))
+                onGameStarted = { gameId, playerNames, playUntil, gameType, pairings ->
+                    val playerList = playerNames.mapIndexed { i, name -> Player("p$i", name, i) }
+                    // Convert seat-pair list to bidirectional map for storage
+                    val partnershipMap = pairings
+                        .flatMap { (a, b) ->
+                            listOf(a.toString() to b.toString(), b.toString() to a.toString())
+                        }
+                        .toMap()
+                    app.activeGameRepository.save(
+                        ActiveGameState(
+                            gameId       = gameId,
+                            players      = playerList,
+                            scores       = playerList.associate { it.seat.toString() to 0 },
+                            nextSeat     = playerList.size,
+                            playUntil    = playUntil,
+                            gameType     = gameType,
+                            startedAt    = System.currentTimeMillis(),
+                            partnerships = partnershipMap
+                        )
+                    )
+                    playerNames.forEach { app.playerRosterRepository.addPlayer(it) }
+                    if (!gameType.isNullOrBlank()) app.gameTypeRepository.addType(gameType)
+                    navController.navigate(Screen.Game.route(gameId, playerNames))
                 },
                 onBack = { navController.popBackStack() }
             )
@@ -55,28 +111,27 @@ fun SpiteScoreNavHost(incomingResult: GameResultPayload? = null) {
                 navArgument("gameId") { type = NavType.StringType },
                 navArgument("players") { type = NavType.StringType }
             )
-        ) { backStack ->
-            val gameId = backStack.arguments?.getString("gameId") ?: return@composable
-            val playersArg = Uri.decode(backStack.arguments?.getString("players") ?: "")
-            val playerNames = if (playersArg.isBlank()) listOf("Player 1", "Player 2")
-                              else playersArg.split("|").filter { it.isNotBlank() }
-            GameScreen(
-                gameId = gameId,
-                playerNames = playerNames,
-                onGameEnd = {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Home.route) { inclusive = true }
-                    }
+        ) {
+            // gameId and players are read by GameViewModel via SavedStateHandle automatically
+            val goHome: () -> Unit = {
+                navController.navigate(Screen.Home.route) {
+                    popUpTo(Screen.Home.route) { inclusive = true }
                 }
+            }
+            GameScreen(
+                onGameEnd    = goHome,
+                onReturnHome = goHome
             )
         }
-        composable(Screen.GameHistory.route) {
-            GameHistoryScreen(onBack = { navController.popBackStack() })
+        composable(Screen.Stats.route) {
+            StatsScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.Settings.route) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
-                onAbout = { navController.navigate(Screen.About.route) }
+                onAbout = { navController.navigate(Screen.About.route) },
+                currentTheme = currentTheme,
+                onThemeChange = onThemeChange
             )
         }
         composable(Screen.About.route) {

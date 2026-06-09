@@ -2,8 +2,9 @@ package com.reznick.spitescore.data.repository
 
 import com.reznick.spitescore.data.db.GameSessionDao
 import com.reznick.spitescore.data.db.entities.GameSessionEntity
-import com.reznick.spitescore.data.model.ActiveGame
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -13,22 +14,31 @@ class GameHistoryRepository(private val dao: GameSessionDao) {
 
     fun observeByType(type: String): Flow<List<GameSessionEntity>> = dao.observeByType(type)
 
-    suspend fun save(game: ActiveGame, endedAt: Long) {
+    suspend fun saveSimpleResult(
+        gameId: String,
+        gameType: String,
+        playerNames: List<String>,
+        winnerNames: List<String>,
+        resultType: String,
+        startedAt: Long
+    ) {
+        val now = System.currentTimeMillis()
         dao.insert(
             GameSessionEntity(
-                id = game.id,
-                gameType = game.config.gameType.name,
-                variant = game.config.variant,
-                configJson = Json.encodeToString(game.config),
-                playersJson = Json.encodeToString(game.players),
-                entriesJson = Json.encodeToString(game.entries),
-                winnerSeats = game.winnerSeats.joinToString(","),
-                startedAt = game.startedAt,
-                endedAt = endedAt,
-                durationSeconds = (endedAt - game.startedAt) / 1000
+                id              = gameId,
+                gameType        = gameType,
+                variant         = resultType,
+                configJson      = gameType,
+                playersJson     = Json.encodeToString(ListSerializer(String.serializer()), playerNames),
+                entriesJson     = "[]",
+                winnerNames     = winnerNames.joinToString(","),
+                startedAt       = startedAt,
+                endedAt         = now,
+                durationSeconds = (now - startedAt) / 1000
             )
         )
     }
 
-    suspend fun delete(id: String) = dao.delete(id)
+    suspend fun delete(id: String)  = dao.delete(id)
+    suspend fun deleteAll()         = dao.deleteAll()
 }

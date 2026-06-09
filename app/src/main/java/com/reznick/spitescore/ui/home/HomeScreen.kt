@@ -1,20 +1,26 @@
 package com.reznick.spitescore.ui.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.reznick.spitescore.R
 import com.reznick.spitescore.integration.spitecards.GameResultPayload
 
 @Composable
 fun HomeScreen(
     incomingResult: GameResultPayload?,
+    hasSavedGame: Boolean,
     onNewGame: () -> Unit,
-    onHistory: () -> Unit,
+    onContinueGame: () -> Unit,
+    onStats: () -> Unit,
     onSettings: () -> Unit,
     onAbout: () -> Unit
 ) {
@@ -27,19 +33,21 @@ fun HomeScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                "SpiteScore",
-                style = MaterialTheme.typography.headlineLarge,
-                modifier = Modifier.padding(bottom = 8.dp)
+            Image(
+                painter = painterResource(id = R.drawable.spite_logo),
+                contentDescription = "SpiteScore",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth(0.72f)
+                    .padding(bottom = 8.dp)
             )
             Text(
-                "Track scores. No ads. No accounts.",
+                "Score tracker · No ads · No accounts.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 modifier = Modifier.padding(bottom = 48.dp)
             )
 
-            // SpiteCards handoff banner
             if (incomingResult != null) {
                 SpiteCardsResultBanner(
                     result = incomingResult,
@@ -48,11 +56,27 @@ fun HomeScreen(
                 )
             }
 
-            Button(
-                onClick = onNewGame,
-                modifier = Modifier.fillMaxWidth().height(56.dp)
-            ) {
-                Text("New Game", style = MaterialTheme.typography.titleLarge)
+            if (hasSavedGame) {
+                Button(
+                    onClick = onContinueGame,
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                ) {
+                    Text("Continue Game", style = MaterialTheme.typography.titleLarge)
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = onNewGame,
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                ) {
+                    Text("New Game", style = MaterialTheme.typography.titleLarge)
+                }
+            } else {
+                Button(
+                    onClick = onNewGame,
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                ) {
+                    Text("New Game", style = MaterialTheme.typography.titleLarge)
+                }
             }
 
             Spacer(Modifier.height(48.dp))
@@ -61,7 +85,7 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                TextButton(onClick = onHistory) { Text("History") }
+                TextButton(onClick = onStats) { Text("Stats") }
                 TextButton(onClick = onSettings) { Text("Settings") }
                 TextButton(onClick = onAbout) { Text("About") }
             }
