@@ -51,7 +51,12 @@ class GameHistoryRepository(private val dao: GameSessionDao) {
     suspend fun saveReceivedResult(payload: GameResultPayload) {
         val ordered     = payload.players.sortedBy { it.seat }
         val playerNames = ordered.map { it.name }
-        val winnerNames = payload.players
+
+        // A game with only one player is practice: keep the score and scorecard for personal
+        // bests, but don't record it as a win or a loss. NO_WIN is neutral in the stats math
+        // (counts as "games played" only). Two+ players resolve a winner as usual.
+        val isPractice  = payload.players.size < 2
+        val winnerNames = if (isPractice) emptyList() else payload.players
             .filter { it.seat in payload.winnerSeats }
             .map { it.name }
 
@@ -63,7 +68,7 @@ class GameHistoryRepository(private val dao: GameSessionDao) {
             GameSessionEntity(
                 id              = "${payload.sourceApp}_${payload.playedAt}",
                 gameType        = payload.gameType.replaceFirstChar { it.uppercase() },
-                variant         = "WIN",   // companion games always resolve a winner (high score)
+                variant         = if (isPractice) "NO_WIN" else "WIN",
                 configJson      = payload.gameType,
                 playersJson     = Json.encodeToString(ListSerializer(String.serializer()), playerNames),
                 entriesJson     = Json.encodeToString(

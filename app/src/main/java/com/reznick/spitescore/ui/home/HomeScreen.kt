@@ -26,6 +26,15 @@ fun HomeScreen(
     onAbout: () -> Unit
 ) {
     var resultSaved by remember { mutableStateOf(false) }
+    // Auto-save a score handed back from a companion app (e.g. SpiteYatzy) exactly once,
+    // so it lands in history without a manual tap. saveReceivedResult is idempotent
+    // (REPLACE on a stable id), so a re-delivered result can't duplicate the entry.
+    LaunchedEffect(incomingResult) {
+        if (incomingResult != null && !resultSaved) {
+            onSaveResult()
+            resultSaved = true
+        }
+    }
     Scaffold { padding ->
         Column(
             modifier = Modifier
@@ -50,10 +59,10 @@ fun HomeScreen(
                 modifier = Modifier.padding(bottom = 48.dp)
             )
 
-            if (incomingResult != null && !resultSaved) {
+            if (incomingResult != null) {
                 SpiteCardsResultBanner(
                     result = incomingResult,
-                    onSave = { onSaveResult(); resultSaved = true },
+                    onViewStats = onStats,
                     modifier = Modifier.padding(bottom = 24.dp)
                 )
             }
@@ -108,7 +117,7 @@ fun HomeScreen(
 @Composable
 private fun SpiteCardsResultBanner(
     result: GameResultPayload,
-    onSave: () -> Unit,
+    onViewStats: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
@@ -118,7 +127,7 @@ private fun SpiteCardsResultBanner(
                 "spitecards" -> "SpiteCards"
                 else         -> result.sourceApp.ifBlank { "a companion app" }
             }
-            Text("Game received from $source", style = MaterialTheme.typography.titleLarge)
+            Text("Score saved from $source", style = MaterialTheme.typography.titleLarge)
             Text(
                 "${result.gameType.replaceFirstChar { it.uppercase() }} · ${result.players.size} players",
                 style = MaterialTheme.typography.bodyMedium
@@ -134,8 +143,8 @@ private fun SpiteCardsResultBanner(
                 )
             }
             Spacer(Modifier.height(4.dp))
-            Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
-                Text("Save to history")
+            Button(onClick = onViewStats, modifier = Modifier.fillMaxWidth()) {
+                Text("View in Stats")
             }
         }
     }
