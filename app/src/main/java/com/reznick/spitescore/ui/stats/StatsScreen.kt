@@ -68,6 +68,7 @@ fun StatsScreen(onBack: () -> Unit) {
 
     var detailTarget by remember { mutableStateOf<DetailTarget?>(null) }
     var scorecardSession by remember { mutableStateOf<GameSessionEntity?>(null) }
+    var yatzyDetailName by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -166,7 +167,7 @@ fun StatsScreen(onBack: () -> Unit) {
                         // Yatzy-specific section: only for games that sent a full scorecard
                         if (scorecardSessions.isNotEmpty()) {
                             item { Text("Yatzy Stats", style = MaterialTheme.typography.titleMedium) }
-                            item { YatzyStatsCard(yatzyStats) }
+                            item { YatzyStatsCard(yatzyStats) { name -> yatzyDetailName = name } }
                             item { Text("Scorecards", style = MaterialTheme.typography.titleMedium) }
                             items(scorecardSessions, key = { it.id }) { session ->
                                 ScorecardListRow(session) { scorecardSession = session }
@@ -193,6 +194,16 @@ fun StatsScreen(onBack: () -> Unit) {
 
     scorecardSession?.let { session ->
         ScorecardDialog(session = session, onDismiss = { scorecardSession = null })
+    }
+
+    yatzyDetailName?.let { name ->
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { yatzyDetailName = null },
+            sheetState       = sheetState
+        ) {
+            YatzyPlayerDetailContent(name, sessions)
+        }
     }
 }
 

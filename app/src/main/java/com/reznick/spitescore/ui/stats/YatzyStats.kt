@@ -1,5 +1,6 @@
 package com.reznick.spitescore.ui.stats
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -84,7 +85,7 @@ fun computeYatzyStats(sessions: List<GameSessionEntity>): List<YatzyPlayerStats>
 // ── Yatzy stats card ───────────────────────────────────────────────────────────
 
 @Composable
-fun YatzyStatsCard(stats: List<YatzyPlayerStats>) {
+fun YatzyStatsCard(stats: List<YatzyPlayerStats>, onPlayerClick: (String) -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column {
             Row(
@@ -110,7 +111,10 @@ fun YatzyStatsCard(stats: List<YatzyPlayerStats>) {
             HorizontalDivider()
             stats.forEachIndexed { idx, s ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onPlayerClick(s.name) }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -127,6 +131,12 @@ fun YatzyStatsCard(stats: List<YatzyPlayerStats>) {
                 }
                 if (idx < stats.lastIndex) HorizontalDivider()
             }
+            Text(
+                "Tap a player for full stats",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
         }
     }
 }
@@ -204,5 +214,169 @@ private fun ScoreRow(label: String, values: List<Int>, labelW: androidx.compose.
                 fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal
             )
         }
+    }
+}
+
+// ── Per-player detailed Yatzy profile ───────────────────────────────────────────
+
+data class CategoryAvg(val label: String, val avg: Double, val scratched: Int)
+
+data class YatzyPlayerDetail(
+    val name: String,
+    val games: Int = 0,
+    val avg: Int = 0,
+    val best: Int = 0,
+    val worst: Int = 0,
+    val yatzies: Int = 0,
+    val upperBonusRate: Int = 0,
+    val heartbreaks: Int = 0,   // games lost by < 5
+    val blowouts: Int = 0,      // games won by >= 50
+    val longestWinStreak: Int = 0,
+    val luckyNumber: String? = null,   // best-scoring upper box
+    val mostScratched: String? = null, // box most often zeroed
+    val categoryAverages: List<CategoryAvg> = emptyList(),
+)
+
+private val UPPER_KEYS = listOf("ones", "twos", "threes", "fours", "fives", "sixes")
+
+fun computeYatzyPlayerDetail(name: String, sessions: List<GameSessionEntity>): YatzyPlayerDetail {
+    val totals = mutableListOf<Int>()
+    var yatzies = 0
+    var upperBonusGames = 0
+    var heartbreaks = 0
+    var blowouts = 0
+    val catSum = HashMap<String, Int>()
+    val catCount = HashMap<String, Int>()
+    val catScratch = HashMap<String, Int>()
+    val chronoWins = mutableListOf<Pair<Long, Boolean>>()  // startedAt -> won
+
+    for (session in sessions.filter { hasScorecards(it) }) {
+        val cards = parseScorecards(session)
+        val names = sessionNames(session)
+        val seat = names.indexOf(name)
+        if (seat < 0) continue
+        val mine = cards.find { it.seat == seat } ?: continue
+
+        totals += mine.total
+        val gotYatzy = (mine.categories["yatzy"] ?: 0) >= 50
+        yatzies += (if (gotYatzy) 1 else 0) + mine.yatzyBonus.coerceAtLeast(0)
+        if (mine.upperBonus > 0) upperBonusGames++
+
+        for ((key, _) in YATZY_CATEGORIES) {
+            val v = mine.categories[key] ?: 0
+            catSum[key] = (catSum[key] ?: 0) + v
+            catCount[key] = (catCount[key] ?: 0) + 1
+            if (v == 0) catScratch[key] = (catScratch[key] ?: 0) + 1
+        }
+
+        val maxOther = cards.filter { it.seat != seat }.maxOfOrNull { it.total }
+        val won = maxOther == null || mine.total > maxOther
+        chronoWins += session.startedAt to won
+        if (maxOther != null) {
+            val margin = mine.total - maxOther
+            when {
+                margin in 1..49  -> {}
+                margin >= 50     -> blowouts++
+                margin in -4..-1 -> heartbreaks++
+            }
+        }
+    }
+
+    val games = totals.size
+    val lucky = UPPER_KEYS
+        .filter { (catCount[it] ?: 0) > 0 }
+        .maxByOrNull { (catSum[it] ?: 0).toDouble() / catCount[it]!! }
+    val mostScratchedKey = catScratch.entries.filter { it.value > 0 }.maxByOrNull { it.value }?.key
+
+    var longest = 0; var cur = 0
+    chronoWins.sortedBy { it.first }.forEach { (_, won) ->
+        if (won) { cur++; longest = maxOf(longest, cur) } else cur = 0
+    }
+
+    return YatzyPlayerDetail(
+        name             = name,
+        games            = games,
+        avg              = if (games > 0) totals.sum() / games else 0,
+        best             = totals.maxOrNull() ?: 0,
+        worst            = totals.minOrNull() ?: 0,
+        yatzies          = yatzies,
+        upperBonusRate   = if (games > 0) upperBonusGames * 100 / games else 0,
+        heartbreaks      = heartbreaks,
+        blowouts         = blowouts,
+        longestWinStreak = longest,
+        luckyNumber      = YATZY_CATEGORIES.find { it.first == lucky }?.second,
+        mostScratched    = YATZY_CATEGORIES.find { it.first == mostScratchedKey }?.second,
+        categoryAverages = YATZY_CATEGORIES.map { (k, l) ->
+            CategoryAvg(
+                label = l,
+                avg = if ((catCount[k] ?: 0) > 0) (catSum[k]!!.toDouble() / catCount[k]!!) else 0.0,
+                scratched = catScratch[k] ?: 0
+            )
+        },
+    )
+}
+
+@Composable
+fun YatzyPlayerDetailContent(name: String, sessions: List<GameSessionEntity>) {
+    val d = remember(name, sessions) { computeYatzyPlayerDetail(name, sessions) }
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+        Text("$name · Yatzy", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "${d.games} game${if (d.games != 1) "s" else ""}",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        StatRow("Average score", "${d.avg}")
+        StatRow("Best game", "${d.best}", highlight = true)
+        StatRow("Worst game", "${d.worst}")
+        StatRow("Yatzies rolled", "${d.yatzies} 🎲")
+        StatRow("Upper-bonus rate", "${d.upperBonusRate}%")
+        StatRow("Longest win streak", "${d.longestWinStreak}")
+        StatRow("Heartbreaks (lost by <5)", "${d.heartbreaks} 💔")
+        StatRow("Blowouts (won by 50+)", "${d.blowouts} 💥")
+        d.luckyNumber?.let { StatRow("Lucky number", it) }
+        d.mostScratched?.let { StatRow("Most scratched", it) }
+
+        Spacer(Modifier.height(16.dp))
+        Text("Category averages", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        d.categoryAverages.forEach { c ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(c.label, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    buildString {
+                        append(String.format(java.util.Locale.US, "%.1f", c.avg))
+                        if (c.scratched > 0) append("  (${c.scratched}× scratched)")
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (c.scratched > 0) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun StatRow(label: String, value: String, highlight: Boolean = false) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+            color = if (highlight) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface
+        )
     }
 }
