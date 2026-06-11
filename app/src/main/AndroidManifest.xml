@@ -3,6 +3,12 @@
 
     <!-- Intentionally no android.permission.INTERNET -->
 
+    <!-- Shared-roster access: only apps signed with the same key (the other Spite apps) may
+         read/write the roster provider. Keep the name in sync with SpiteYatzy. -->
+    <permission
+        android:name="com.reznick.spite.permission.ACCESS_ROSTER"
+        android:protectionLevel="signature" />
+
     <!-- Detect companion-app installation (Android 11+ package visibility) -->
     <queries>
         <package android:name="com.reznick.spitecards" />
@@ -29,6 +35,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Shared player roster, read/written by sibling Spite apps (e.g. SpiteYatzy). -->
+        <provider
+            android:name=".integration.roster.RosterProvider"
+            android:authorities="com.reznick.spitescore.roster"
+            android:exported="true"
+            android:readPermission="com.reznick.spite.permission.ACCESS_ROSTER"
+            android:writePermission="com.reznick.spite.permission.ACCESS_ROSTER" />
 
         <!-- Entry point for incoming game-result intents from SpiteCards -->
         <activity
