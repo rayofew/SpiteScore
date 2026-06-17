@@ -44,10 +44,15 @@
             android:readPermission="com.reznick.spite.permission.ACCESS_ROSTER"
             android:writePermission="com.reznick.spite.permission.ACCESS_ROSTER" />
 
-        <!-- Entry point for incoming game-result intents from SpiteCards -->
+        <!-- Entry point for incoming game-result intents from companion apps. Invisible
+             (translucent, no history, not in recents) so a silent import never flashes UI;
+             on a non-silent import it immediately launches MainActivity instead. -->
         <activity
             android:name=".integration.spitecards.ReceiveGameResultActivity"
             android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:taskAffinity="com.reznick.spitescore.integration">
             <intent-filter>
                 <action android:name="com.reznick.spite.action.RECEIVE_GAME_RESULT" />
