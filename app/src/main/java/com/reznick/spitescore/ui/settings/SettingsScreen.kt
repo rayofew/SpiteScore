@@ -25,16 +25,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.reznick.spitescore.BuildConfig
 import com.reznick.spitescore.SpiteScoreApp
-import com.reznick.spitescore.data.repository.ThemeMode
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    onAbout: () -> Unit,
-    currentTheme: ThemeMode = ThemeMode.SYSTEM,
-    onThemeChange: (ThemeMode) -> Unit = {}
+    onAbout: () -> Unit
 ) {
     val app = LocalContext.current.applicationContext as SpiteScoreApp
     val rosterRepo = app.playerRosterRepository
@@ -67,32 +64,6 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            item {
-                Spacer(Modifier.height(8.dp))
-                Text("Appearance", style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(vertical = 8.dp))
-            }
-            item {
-                val options = listOf(
-                    ThemeMode.SYSTEM to "System",
-                    ThemeMode.LIGHT  to "Light",
-                    ThemeMode.DARK   to "Dark"
-                )
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    options.forEachIndexed { index, (mode, label) ->
-                        SegmentedButton(
-                            selected = currentTheme == mode,
-                            onClick = { onThemeChange(mode) },
-                            shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                            label = { Text(label) }
-                        )
-                    }
-                }
-            }
-
-            item { Spacer(Modifier.height(24.dp)) }
-            item { HorizontalDivider() }
-
             item {
                 Spacer(Modifier.height(8.dp))
                 Text("Players", style = MaterialTheme.typography.titleMedium,
@@ -231,15 +202,15 @@ fun SettingsScreen(
 
             item {
                 ListItem(
-                    headlineContent = { Text("Donate") },
-                    supportingContent = { Text("Support development") },
+                    headlineContent = { Text("Tip") },
+                    supportingContent = { Text("Support the Spite line") },
                     trailingContent = {
                         Icon(Icons.Default.Launch, contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                     },
                     modifier = Modifier.clickable {
                         val intent = Intent(Intent.ACTION_VIEW,
-                            Uri.parse("https://ko-fi.com/spitescore"))
+                            Uri.parse("https://ko-fi.com/spiteapps"))
                         app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
                 )

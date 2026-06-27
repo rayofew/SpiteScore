@@ -18,7 +18,6 @@ import androidx.navigation.navArgument
 import com.reznick.spitescore.SpiteScoreApp
 import com.reznick.spitescore.data.model.Player
 import com.reznick.spitescore.data.repository.ActiveGameState
-import com.reznick.spitescore.data.repository.ThemeMode
 // Uri is still used by Screen.Game.route() helper above
 import com.reznick.spitescore.integration.spitecards.GameResultPayload
 import com.reznick.spitescore.ui.about.AboutScreen
@@ -42,9 +41,7 @@ sealed class Screen(val route: String) {
 
 @Composable
 fun SpiteScoreNavHost(
-    incomingResult: GameResultPayload? = null,
-    currentTheme: ThemeMode = ThemeMode.SYSTEM,
-    onThemeChange: (ThemeMode) -> Unit = {}
+    incomingResult: GameResultPayload? = null
 ) {
     val navController = rememberNavController()
 
@@ -137,9 +134,7 @@ fun SpiteScoreNavHost(
         composable(Screen.Settings.route) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
-                onAbout = { navController.navigate(Screen.About.route) },
-                currentTheme = currentTheme,
-                onThemeChange = onThemeChange
+                onAbout = { navController.navigate(Screen.About.route) }
             )
         }
         composable(Screen.About.route) {

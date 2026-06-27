@@ -2,40 +2,36 @@ package com.reznick.spitescore.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Terracotta family (primary) ───────────────────────────────────────────────
-val Terracotta10  = Color(0xFF340E00)
-val Terracotta20  = Color(0xFF591A00)
-val Terracotta40  = Color(0xFF8F3E12)   // light-mode primary
-val Terracotta80  = Color(0xFFFFB68E)   // dark-mode primary
-val Terracotta90  = Color(0xFFFFDBC8)   // light primaryContainer
-val Terracotta99  = Color(0xFFFFF8F5)   // light background / surface
+/**
+ * Shared identity with SpiteYatzy — warm & editorial. A cream "paper" background, one refined
+ * clay accent, antique gold for highlights, plus warm-roast variants for the dark toggle.
+ */
+object SpiteColors {
+    // Brand accent — refined terracotta / clay.
+    val Accent = Color(0xFFB04A36)
+    val AccentDark = Color(0xFF8A3829)
+    val AccentContainer = Color(0xFFF1D9CE)
+    val OnAccentContainer = Color(0xFF3A130A)
 
-// ── Plum family (secondary — the surprise) ────────────────────────────────────
-val Plum10  = Color(0xFF1F004E)
-val Plum20  = Color(0xFF38006D)
-val Plum40  = Color(0xFF6E4FA3)         // light-mode secondary
-val Plum80  = Color(0xFFD1BAFF)         // dark-mode secondary
-val Plum90  = Color(0xFFEADEFF)         // light secondaryContainer
+    // Highlights — antique gold, not neon.
+    val Gold = Color(0xFFA9802F)
+    val GoldContainer = Color(0xFFEDE0BD)
+    val OnGold = Color(0xFF382A09)
 
-// ── Amber family (tertiary — score highlights) ────────────────────────────────
-val Amber10 = Color(0xFF231B00)
-val Amber40 = Color(0xFF785A00)
-val Amber80 = Color(0xFFECC32A)
-val Amber90 = Color(0xFFFFDF6B)
+    // Warm paper surfaces (light).
+    val Paper = Color(0xFFF7F1E7)
+    val PaperSurface = Color(0xFFFFFDF8)
+    val PaperSurfaceVariant = Color(0xFFEEE6D8)
+    val PaperOutline = Color(0xFFD8CCBB)
+    val OnPaper = Color(0xFF2A241E)
+    val OnPaperMuted = Color(0xFF6E655A)
 
-// ── Warm neutrals (surfaces & text) ──────────────────────────────────────────
-val WarmNeutral10  = Color(0xFF1C1210)  // dark background
-val WarmNeutral20  = Color(0xFF302420)  // dark surface
-val WarmNeutral30  = Color(0xFF4A3830)  // outline / muted
-val WarmNeutral90  = Color(0xFFECE0DB)  // dark onSurface
-val WarmNeutral95  = Color(0xFFF9F0EB)  // light surfaceVariant
+    // Warm brick error.
+    val Error = Color(0xFFA8392B)
+    val ErrorContainer = Color(0xFFF1D8D0)
+    val OnErrorContainer = Color(0xFF3A0E07)
+}
 
-// ── Error ─────────────────────────────────────────────────────────────────────
-val ErrorLight          = Color(0xFFBA1A1A)
-val ErrorDark           = Color(0xFFFFB4AB)
-val ErrorContainerLight = Color(0xFFFFDAD6)
-val ErrorContainerDark  = Color(0xFF93000A)
-
-// ── Score delta colours (used directly in GameScreen) ─────────────────────────
-val DeltaPositive = Color(0xFF4CAF50)
-val DeltaNegative = Color(0xFFEF5350)
+// ── Score-delta colours (used directly in GameScreen) — warm and on-brand ─────
+val DeltaPositive = Color(0xFF4A6B4E)   // muted green
+val DeltaNegative = Color(0xFFA8392B)   // warm brick

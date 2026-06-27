@@ -45,11 +45,11 @@ fun HomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Image(
-                painter = painterResource(id = R.drawable.spite_logo),
-                contentDescription = "SpiteScore",
+                painter = painterResource(id = R.drawable.logo_spiteapps),
+                contentDescription = "Spite Apps",
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .fillMaxWidth(0.72f)
+                    .fillMaxWidth(0.82f)
                     .padding(bottom = 8.dp)
             )
             Text(
