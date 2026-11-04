@@ -10,5 +10,6 @@ data class ScoreLogEntry(
     val delta: Int,
     val scoreAfter: Int,
     val timestamp: Long = System.currentTimeMillis(),
-    val isUndo: Boolean = false
+    val isUndo: Boolean = false,
+    val reversed: Boolean = false           // this entry was later taken back from the log
 )

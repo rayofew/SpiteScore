@@ -108,10 +108,25 @@ class GameViewModel(
     var currentGameType by mutableStateOf(savedState?.gameType?.ifBlank { null })
         private set
 
+    /** Cribbage: the primary seat of the side whose crib it is. */
+    var dealerSeat by mutableStateOf(savedState?.dealerSeat)
+        private set
+
+    /** Primary seats only — one per side/team, in seat order. */
+    val primarySeats: List<Int>
+        get() = players.map { primarySeat(it.seat) }.distinct().sorted()
+
+    /** The split-screen cribbage layout applies to a two-sided game of Cribbage. */
+    val isCribbageLayout: Boolean
+        get() = currentGameType?.trim()?.equals("Cribbage", ignoreCase = true) == true &&
+            primarySeats.size == 2
+
     // ── Transient display state ────────────────────────────────────────────
 
     val sessionDelta = mutableStateMapOf<Int, Int>()
     val flashDelta   = mutableStateMapOf<Int, Int>()
+    /** Individual taps that make up each open session, newest last. */
+    private val sessionTaps = mutableStateMapOf<Int, List<Int>>()
     val scoreLog     = if (savedState != null) {
         mutableStateListOf(*savedState.scoreLog.toTypedArray())
     } else {
@@ -190,7 +205,8 @@ class GameViewModel(
                 gameType     = currentGameType,
                 startedAt    = startedAt,
                 teams        = teams.entries.associate { (k, v) -> k.toString() to v },
-                scoreLog     = scoreLog.toList()
+                scoreLog     = scoreLog.toList(),
+                dealerSeat   = dealerSeat
             )
         )
     }
@@ -203,6 +219,7 @@ class GameViewModel(
         sessionJobs[ps]?.cancel()
         sessionJobs.remove(ps)
         sessionDelta.remove(ps)
+        sessionTaps.remove(ps)
     }
 
     /** Add [delta] to [seat]'s team score; restart the 5-second commit debounce. */
@@ -214,6 +231,7 @@ class GameViewModel(
         val running = (sessionDelta[ps] ?: 0) + delta
         sessionDelta[ps] = running
         flashDelta[ps]   = running
+        sessionTaps[ps]  = (sessionTaps[ps] ?: emptyList()) + delta
 
         // Log: one entry per session, updated in-place while the session is open
         val name = teamDisplayName(ps)
@@ -271,6 +289,87 @@ class GameViewModel(
         saveGame()
     }
 
+    /**
+     * What [takeBack] would remove for [seat]'s side right now: the last single
+     * tap while a session is open, otherwise the whole last committed entry.
+     * Null when there is nothing to take back.
+     */
+    fun takeBackPreview(seat: Int): Int? {
+        val ps = primarySeat(seat)
+        sessionTaps[ps]?.lastOrNull()?.let { return it }
+        val stack = _undoStacks[ps]?.takeIf { it.isNotEmpty() } ?: return null
+        return (scores[ps] ?: 0) - stack.last()
+    }
+
+    /**
+     * Finer-grained undo for fast pegging: while a session is still open (within
+     * the debounce window) remove only the most recent tap and keep earlier ones.
+     * Once the session has committed this behaves like [undoLastScore].
+     */
+    fun takeBack(seat: Int) {
+        val ps   = primarySeat(seat)
+        val taps = sessionTaps[ps]
+        if (taps.isNullOrEmpty()) { undoLastScore(ps); return }
+
+        val last      = taps.last()
+        val remaining = taps.dropLast(1)
+        scores[ps] = (scores[ps] ?: 0) - last
+        val running = (sessionDelta[ps] ?: 0) - last
+        val idx = scoreLog.indexOfFirst { it.seat == ps && !it.isUndo }
+
+        if (remaining.isEmpty() || running == 0) {
+            // The whole session is gone: drop its log entry and its undo snapshot
+            if (idx >= 0) scoreLog.removeAt(idx)
+            _undoStacks[ps] = (_undoStacks[ps] ?: emptyList()).dropLast(1)
+            sessionJobs[ps]?.cancel()
+            sessionJobs.remove(ps)
+            sessionDelta.remove(ps)
+            sessionTaps.remove(ps)
+            flashDelta.remove(ps)
+        } else {
+            sessionDelta[ps] = running
+            sessionTaps[ps]  = remaining
+            flashDelta[ps]   = running
+            if (idx >= 0) scoreLog[idx] = scoreLog[idx].copy(
+                delta = running, scoreAfter = scores[ps] ?: 0)
+            sessionJobs[ps]?.cancel()
+            sessionJobs[ps] = viewModelScope.launch {
+                delay(5_000)
+                commitSession(ps)
+                saveGame()
+            }
+        }
+        saveGame()
+    }
+
+    /**
+     * Take back a specific earlier score from the log, not just the latest one.
+     * The entry stays in the log marked reversed, and a matching undo entry is added.
+     */
+    fun reverseLogEntry(entry: ScoreLogEntry) {
+        if (entry.isUndo || entry.reversed) return
+        val idx = scoreLog.indexOfFirst { it.id == entry.id }
+        if (idx < 0) return
+        val ps = primarySeat(entry.seat)
+        if (players.none { primarySeat(it.seat) == ps }) return
+
+        commitSession(ps)
+        pushUndo(ps)
+        scores[ps]     = (scores[ps] ?: 0) - entry.delta
+        scoreLog[idx]  = scoreLog[idx].copy(reversed = true)
+        flashDelta[ps] = -entry.delta
+        scoreLog.add(0, ScoreLogEntry(seat = ps, playerName = teamDisplayName(ps),
+            delta = -entry.delta, scoreAfter = scores[ps] ?: 0, isUndo = true))
+        if (scoreLog.size > 50) scoreLog.removeAt(scoreLog.lastIndex)
+        saveGame()
+    }
+
+    /** Cribbage: make [seat]'s side the dealer. */
+    fun setDealer(seat: Int) {
+        dealerSeat = primarySeat(seat)
+        saveGame()
+    }
+
     // ── Player management ──────────────────────────────────────────────────
 
     fun selectPlayer(seat: Int) {
@@ -316,6 +415,7 @@ class GameViewModel(
         players.forEach { if (primarySeat(it.seat) == it.seat) scores[it.seat] = 0 }
         flashDelta.clear()
         sessionDelta.clear()
+        sessionTaps.clear()
         scoreLog.clear()
         _undoStacks.clear()
         sessionJobs.values.forEach { it.cancel() }

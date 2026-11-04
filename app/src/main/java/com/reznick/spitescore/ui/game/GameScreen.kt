@@ -27,6 +27,9 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.filled.Splitscreen
+import com.reznick.spitescore.ui.game.cribbage.CribbageScreen
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -95,6 +98,17 @@ fun GameScreen(
         }
     }
 
+    // Two-sided Cribbage gets the split-screen board; the standard list stays one tap away.
+    var useStandardLayout by rememberSaveable { mutableStateOf(false) }
+    if (viewModel.isCribbageLayout && !useStandardLayout) {
+        CribbageScreen(
+            viewModel            = viewModel,
+            snackbarHostState    = snackbarHostState,
+            onShowStandardLayout = { useStandardLayout = true }
+        )
+        return
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -120,6 +134,11 @@ fun GameScreen(
                     }
                 },
                 actions = {
+                    if (viewModel.isCribbageLayout) {
+                        IconButton(onClick = { useStandardLayout = false }) {
+                            Icon(Icons.Default.Splitscreen, contentDescription = "Cribbage board layout")
+                        }
+                    }
                     IconButton(onClick = { showGameSettings = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "Game Settings")
                     }
@@ -606,7 +625,7 @@ private fun AddToScoreDialog(
 }
 
 @Composable
-private fun SetScoreDialog(
+internal fun SetScoreDialog(
     playerName: String,
     currentScore: Int,
     onSet: (Int) -> Unit,
@@ -653,7 +672,7 @@ private fun SetScoreDialog(
 }
 
 @Composable
-private fun RenameDialog(currentName: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+internal fun RenameDialog(currentName: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
     var text by remember { mutableStateOf(currentName) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -683,7 +702,7 @@ private fun ResetScoresDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun EndGameDialog(
+internal fun EndGameDialog(
     players: List<Player>,
     scores: Map<Int, Int>,
     teamNameFor: (Int) -> String,

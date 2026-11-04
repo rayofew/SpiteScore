@@ -18,7 +18,8 @@ data class ActiveGameState(
     val startedAt: Long = System.currentTimeMillis(),
     val partnerships: Map<String, String> = emptyMap(),  // legacy: "seat" → "partnerSeat" (pairs only)
     val teams: Map<String, Int> = emptyMap(),            // "seat" → teamId; absent = plays solo
-    val scoreLog: List<ScoreLogEntry> = emptyList()
+    val scoreLog: List<ScoreLogEntry> = emptyList(),
+    val dealerSeat: Int? = null                          // cribbage: whose crib it is
 )
 
 class ActiveGameRepository(context: Context) {
